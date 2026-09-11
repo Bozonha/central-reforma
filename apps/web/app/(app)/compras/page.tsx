@@ -11,11 +11,22 @@ import {
 import { requireSession } from "../../../lib/auth/actions";
 import { resolverObraSelecionada } from "../../../lib/obras/selecionar";
 import { criarItemLista, atualizarStatusItemLista, excluirItemLista, criarCompra, excluirCompra } from "../../../lib/compras/actions";
-import { criarProduto, criarLojaManual, criarOferta, geocodificarObra } from "../../../lib/mercado/actions";
+import {
+  criarProduto,
+  criarLojaManual,
+  criarOferta,
+  geocodificarObra,
+  buscarOfertasMercadoLivre,
+  importarOfertaMercadoLivre,
+} from "../../../lib/mercado/actions";
 import { buscarLojasProximas } from "../../../lib/mercado/overpass";
+import { calcularCustoEfetivo, type ObraLogisticaPerfil } from "../../../lib/mercado/custo-efetivo";
+import { statusConexaoMercadoLivre, mercadoLivreConfigurado } from "../../../lib/mercado/mercadolivre/client";
+import { atualizarLogisticaObra } from "../../../lib/obras/actions";
 import { Card, CardBody, CardHeader } from "../../components/ui/card";
 import { EmptyState } from "../../components/ui/empty-state";
 import { LinkButton } from "../../components/ui/button";
+import { Badge } from "../../components/ui/badge";
 import { Icon } from "../../components/icons";
 import { ObraSelector } from "../components/obra-selector";
 import { Tabs } from "./components/tabs";
@@ -24,6 +35,8 @@ import { CompraForm } from "./components/compra-form";
 import { ProdutoForm } from "./components/produto-form";
 import { LojaForm } from "./components/loja-form";
 import { OfertaForm } from "./components/oferta-form";
+import { LogisticaForm } from "./components/logistica-form";
+import { MercadoLivreBusca } from "./components/mercado-livre-busca";
 import { GeocodificarButton } from "./components/geocodificar-button";
 import { LojasMapClient as LojasMap } from "./components/lojas-map-client";
 import type { LojaDescobertaMapa, LojaMapa } from "./components/lojas-map";
@@ -50,11 +63,13 @@ function formatData(d: Date) {
 export default async function ComprasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ obraId?: string }>;
+  searchParams: Promise<{ obraId?: string; ml?: string; detalhe?: string }>;
 }) {
   const sessao = await requireSession();
-  const { obraId: obraIdParam } = await searchParams;
+  const { obraId: obraIdParam, ml: mlStatus, detalhe: mlDetalhe } = await searchParams;
   const { obras, obraId } = await resolverObraSelecionada(sessao.usuarioId, obraIdParam);
+  const mlConexao = await statusConexaoMercadoLivre();
+  const mlConfigurado = mercadoLivreConfigurado();
 
   if (!obraId) {
     return (
@@ -85,26 +100,87 @@ export default async function ComprasPage({
 
   const produtoNome = new Map(produtos.map((p) => [p.id, p.nome]));
   const lojaNome = new Map(lojas.map((l) => [l.id, l.nome]));
+  const lojaTipo = new Map(lojas.map((l) => [l.id, l.tipo as "ONLINE" | "FISICA"]));
+  const lojaCoord = new Map(
+    lojas.filter((l) => l.latitude != null && l.longitude != null).map((l) => [l.id, { lat: l.latitude!, lng: l.longitude! }]),
+  );
 
   const itensPendentes = itensLista.filter((i) => i.status === "PENDENTE");
   const criarItemComObra = criarItemLista.bind(null, obraId);
   const criarCompraComObra = criarCompra.bind(null, obraId);
   const geocodificarObraComId = geocodificarObra.bind(null, obraId);
+  const atualizarLogisticaComObra = atualizarLogisticaObra.bind(null, obraId);
 
   const totalGastoCent = comprasLog.reduce((acc, c) => acc + c.valorTotalCent, 0);
 
   const observacoesPorProduto = new Map<string, { precoCent: number; capturadoEm: Date }[]>();
+  const historicoPorProduto = new Map<
+    string,
+    { precoCent: number; capturadoEm: Date; lojaNome: string; fonte: string; fonteUrl: string | null }[]
+  >();
   for (const obs of observacoes) {
     const lista = observacoesPorProduto.get(obs.produtoId) ?? [];
     lista.push({ precoCent: obs.precoCent, capturadoEm: obs.capturadoEm });
     observacoesPorProduto.set(obs.produtoId, lista);
+
+    const historico = historicoPorProduto.get(obs.produtoId) ?? [];
+    historico.push({
+      precoCent: obs.precoCent,
+      capturadoEm: obs.capturadoEm,
+      lojaNome: obs.lojaId ? (lojaNome.get(obs.lojaId) ?? "—") : "—",
+      fonte: obs.fonte,
+      fonteUrl: obs.fonteUrl,
+    });
+    historicoPorProduto.set(obs.produtoId, historico);
+  }
+  for (const historico of historicoPorProduto.values()) {
+    historico.sort((a, b) => b.capturadoEm.getTime() - a.capturadoEm.getTime());
   }
 
-  const ofertasComClassificacao = ofertas.map((o) => {
-    const historico = observacoesPorProduto.get(o.produtoId) ?? [];
-    const resultado = classificarPreco(o.precoCent, historico);
-    return { ...o, produtoNome: produtoNome.get(o.produtoId) ?? "—", lojaNomeExibicao: lojaNome.get(o.lojaId) ?? "—", resultado };
-  });
+  const obraCoord = obra?.latitude != null && obra?.longitude != null ? { lat: obra.latitude, lng: obra.longitude } : null;
+  const perfilLogistica: ObraLogisticaPerfil = {
+    combustivelPrecoLitroCent: obra?.combustivelPrecoLitroCent ?? null,
+    veiculoKmPorLitro: obra?.veiculoKmPorLitro ?? null,
+    pedagioCent: obra?.pedagioCent ?? null,
+    estacionamentoCent: obra?.estacionamentoCent ?? null,
+  };
+  const centsParaInput = (v: number | null) => (v != null ? (v / 100).toFixed(2).replace(".", ",") : "");
+  const logisticaDefaults = {
+    combustivelPrecoLitro: centsParaInput(perfilLogistica.combustivelPrecoLitroCent),
+    veiculoKmPorLitro: perfilLogistica.veiculoKmPorLitro != null ? String(perfilLogistica.veiculoKmPorLitro).replace(".", ",") : "",
+    pedagio: centsParaInput(perfilLogistica.pedagioCent),
+    estacionamento: centsParaInput(perfilLogistica.estacionamentoCent),
+  };
+
+  const ofertasComClassificacao = ofertas
+    .map((o) => {
+      const historico = observacoesPorProduto.get(o.produtoId) ?? [];
+      const resultado = classificarPreco(o.precoCent, historico);
+      const custo = calcularCustoEfetivo(
+        { precoCent: o.precoCent, freteCent: o.freteCent, lojaTipo: lojaTipo.get(o.lojaId) ?? "ONLINE", lojaCoord: lojaCoord.get(o.lojaId) ?? null },
+        obraCoord,
+        perfilLogistica,
+      );
+      return {
+        ...o,
+        produtoNome: produtoNome.get(o.produtoId) ?? "—",
+        lojaNomeExibicao: lojaNome.get(o.lojaId) ?? "—",
+        resultado,
+        custo,
+        historico: historicoPorProduto.get(o.produtoId)?.slice(0, 5) ?? [],
+      };
+    })
+    .sort((a, b) => {
+      if (a.custo.effectiveCostCent == null && b.custo.effectiveCostCent == null) return 0;
+      if (a.custo.effectiveCostCent == null) return 1;
+      if (b.custo.effectiveCostCent == null) return -1;
+      return a.custo.effectiveCostCent - b.custo.effectiveCostCent;
+    });
+
+  const menorCustoEfetivoCent = ofertasComClassificacao.reduce<number | null>((min, o) => {
+    if (o.custo.effectiveCostCent == null) return min;
+    return min == null ? o.custo.effectiveCostCent : Math.min(min, o.custo.effectiveCostCent);
+  }, null);
 
   // ---------------------------------------------------------------------
   // Mapa de lojas próximas — só roda se a obra já tem endereço geocodificado.
@@ -300,7 +376,7 @@ export default async function ComprasPage({
                 <Card>
                   <CardHeader
                     title="Catálogo de produtos e lojas"
-                    description="Cadastro manual real — integração com Mercado Livre fica pronta para plugar depois"
+                    description="Cadastro manual real, sempre disponível como fallback universal."
                   />
                   <CardBody className="flex flex-col gap-5">
                     <ProdutoForm action={criarProduto} />
@@ -310,7 +386,64 @@ export default async function ComprasPage({
                 </Card>
 
                 <Card>
-                  <CardHeader title="Comparador de preços" description="Classificação com base no histórico de observações (90 dias)" />
+                  <CardHeader
+                    title="Mercado Livre"
+                    description="API oficial (OAuth2, app registrado) — nunca scraping. Cobre também grandes redes que vendem através do marketplace deles."
+                    action={
+                      mlConexao.conectado ? (
+                        <Badge tone="good">Conectado</Badge>
+                      ) : mlConfigurado ? (
+                        <LinkButton href="/api/integracoes/mercado-livre/connect" size="sm" icon="check">
+                          Conectar
+                        </LinkButton>
+                      ) : (
+                        <Badge tone="neutral">Não configurado</Badge>
+                      )
+                    }
+                  />
+                  <CardBody className="flex flex-col gap-3">
+                    {mlStatus === "conectado" ? (
+                      <p className="rounded-lg bg-[var(--color-good-soft)] px-3 py-2 text-xs text-[var(--color-good)]">
+                        Conta conectada com sucesso.
+                      </p>
+                    ) : mlStatus === "erro" ? (
+                      <p className="rounded-lg bg-[var(--color-serious-soft)] px-3 py-2 text-xs text-[var(--color-serious)]">
+                        Não foi possível conectar: {mlDetalhe ?? "erro desconhecido"}.
+                      </p>
+                    ) : mlStatus === "sem_configuracao" ? (
+                      <p className="rounded-lg bg-[var(--color-warning-soft)] px-3 py-2 text-xs text-[var(--color-warning)]">
+                        Configure MERCADOLIVRE_CLIENT_ID, MERCADOLIVRE_CLIENT_SECRET e MERCADOLIVRE_REDIRECT_URI antes de conectar (ver
+                        CONFIGURAR.md).
+                      </p>
+                    ) : mlStatus === "estado_invalido" ? (
+                      <p className="rounded-lg bg-[var(--color-serious-soft)] px-3 py-2 text-xs text-[var(--color-serious)]">
+                        A autorização expirou ou foi reiniciada — tente conectar de novo.
+                      </p>
+                    ) : null}
+                    <MercadoLivreBusca
+                      produtos={opcoesProdutos}
+                      conectado={mlConexao.conectado}
+                      buscar={buscarOfertasMercadoLivre}
+                      importar={importarOfertaMercadoLivre}
+                    />
+                  </CardBody>
+                </Card>
+
+                <Card>
+                  <CardHeader
+                    title="Parâmetros de deslocamento"
+                    description="Usados para calcular o custo efetivo de ofertas com retirada em loja física — nunca assumidos, só entram na conta se você informar."
+                  />
+                  <CardBody>
+                    <LogisticaForm action={atualizarLogisticaComObra} defaults={logisticaDefaults} />
+                  </CardBody>
+                </Card>
+
+                <Card>
+                  <CardHeader
+                    title="Comparador de preços"
+                    description="Ordenado por custo efetivo (produto + frete ou deslocamento) — não pelo preço anunciado. Classificação com base no histórico de observações (90 dias)."
+                  />
                   <CardBody>
                     {ofertasComClassificacao.length === 0 ? (
                       <EmptyState icon="orcamento" title="Nenhum preço registrado ainda" description="Cadastre produtos, lojas e um preço observado acima." />
@@ -322,22 +455,72 @@ export default async function ComprasPage({
                               <th className="py-2 font-medium">Produto</th>
                               <th className="py-2 font-medium">Loja</th>
                               <th className="py-2 font-medium">Preço</th>
-                              <th className="py-2 font-medium">Classificação</th>
+                              <th className="py-2 font-medium">Frete / deslocamento</th>
+                              <th className="py-2 font-medium">Custo efetivo</th>
+                              <th className="py-2 font-medium">Histórico</th>
                             </tr>
                           </thead>
                           <tbody>
                             {ofertasComClassificacao.map((o) => (
-                              <tr key={o.id} className="border-b border-[var(--color-border)] last:border-0">
-                                <td className="py-2.5 font-medium text-[var(--color-text)]">{o.produtoNome}</td>
-                                <td className="py-2.5 text-[var(--color-text-muted)]">{o.lojaNomeExibicao}</td>
-                                <td className="py-2.5 text-[var(--color-text-muted)]">{centsToBRL(o.precoCent)}</td>
-                                <td className="py-2.5">
-                                  <span
-                                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${CLASSIFICACAO_BADGE[o.resultado.classificacao]}`}
-                                    title={o.resultado.motivo}
-                                  >
-                                    {o.resultado.classificacao}
+                              <tr key={o.id} className="border-b border-[var(--color-border)] last:border-0 align-top">
+                                <td className="py-2.5 font-medium text-[var(--color-text)]">
+                                  {o.produtoNome}
+                                  {o.custo.effectiveCostCent != null && o.custo.effectiveCostCent === menorCustoEfetivoCent ? (
+                                    <Badge tone="good" className="ml-2">
+                                      Melhor custo
+                                    </Badge>
+                                  ) : null}
+                                </td>
+                                <td className="py-2.5 text-[var(--color-text-muted)]">
+                                  {o.lojaNomeExibicao}
+                                  <span className="ml-1.5 text-xs text-[var(--color-text-faint)]">
+                                    ({lojaTipo.get(o.lojaId) === "FISICA" ? "física" : "online"})
                                   </span>
+                                </td>
+                                <td className="py-2.5 text-[var(--color-text-muted)]">{centsToBRL(o.precoCent)}</td>
+                                <td className="py-2.5 text-xs text-[var(--color-text-muted)]" title={o.custo.nota}>
+                                  {o.custo.deslocamentoCent != null
+                                    ? `${centsToBRL(o.custo.deslocamentoCent)} (${o.custo.distanceKm!.toFixed(1)} km)`
+                                    : o.freteCent != null
+                                      ? centsToBRL(o.freteCent)
+                                      : "—"}
+                                  <p className="mt-0.5 text-[var(--color-text-faint)]">{o.custo.nota}</p>
+                                </td>
+                                <td className="py-2.5 font-medium text-[var(--color-text)]">
+                                  {o.custo.effectiveCostCent != null ? centsToBRL(o.custo.effectiveCostCent) : "Não calculável"}
+                                </td>
+                                <td className="py-2.5">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${CLASSIFICACAO_BADGE[o.resultado.classificacao]}`}
+                                      title={o.resultado.motivo}
+                                    >
+                                      {o.resultado.classificacao}
+                                    </span>
+                                    {o.historico.length > 0 ? (
+                                      <details className="text-xs text-[var(--color-text-muted)]">
+                                        <summary className="cursor-pointer text-[var(--color-primary)]">
+                                          {o.historico.length} registro{o.historico.length > 1 ? "s" : ""}
+                                        </summary>
+                                        <ul className="mt-1 flex flex-col gap-0.5">
+                                          {o.historico.map((h, i) => (
+                                            <li key={i}>
+                                              {formatData(h.capturadoEm)} · {h.lojaNome} · {centsToBRL(h.precoCent)}
+                                              {h.fonteUrl ? (
+                                                <>
+                                                  {" "}
+                                                  ·{" "}
+                                                  <a href={h.fonteUrl} target="_blank" rel="noreferrer" className="text-[var(--color-primary)] hover:underline">
+                                                    fonte
+                                                  </a>
+                                                </>
+                                              ) : null}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </details>
+                                    ) : null}
+                                  </div>
                                 </td>
                               </tr>
                             ))}

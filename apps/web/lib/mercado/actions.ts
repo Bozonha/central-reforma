@@ -8,7 +8,9 @@ import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
 import { produtoSchema, lojaManualSchema, ofertaSchema } from "../validation/mercado";
 import type { FormState } from "../obras/actions";
+import { valoresDoFormulario } from "../forms/state";
 import { geocodificarEndereco } from "./nominatim";
+import { buscarProdutosMercadoLivre, type BuscaMercadoLivreResultado } from "./mercadolivre/client";
 
 function parseNumberInput(value?: string): number | undefined {
   if (!value) return undefined;
@@ -36,7 +38,7 @@ export async function criarProduto(_prev: FormState, formData: FormData): Promis
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   await db.insert(schema.produtos).values(parsed.data);
@@ -58,7 +60,7 @@ export async function criarLojaManual(_prev: FormState, formData: FormData): Pro
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   let latitude: number | null = null;
@@ -104,11 +106,12 @@ export async function criarOferta(_prev: FormState, formData: FormData): Promise
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const precoCent = reaisToCents(parseNumberInput(parsed.data.preco) ?? 0);
-  if (precoCent <= 0) return { fieldErrors: { preco: "Informe um preço válido." } };
+  if (precoCent <= 0)
+    return { fieldErrors: { preco: "Informe um preço válido." }, values: valoresDoFormulario(formData) };
   const freteCent = parsed.data.frete ? reaisToCents(parseNumberInput(parsed.data.frete) ?? 0) : null;
 
   await db.insert(schema.ofertas).values({
@@ -198,6 +201,69 @@ export async function geocodificarObra(obraId: string, _prev: FormState, _formDa
     .update(schema.obras)
     .set({ latitude: geo.latitude, longitude: geo.longitude, geocodificadoEm: new Date() })
     .where(and(eq(schema.obras.id, obraId)));
+
+  revalidatePath("/compras");
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Mercado Livre — API oficial (decisão B.4). Nunca scraping: chamadas
+// autenticadas à API pública e documentada, com o app registrado pelo dono
+// do produto (lib/mercado/mercadolivre/client.ts trata OAuth e proveniência).
+// ---------------------------------------------------------------------------
+
+export async function buscarOfertasMercadoLivre(query: string): Promise<BuscaMercadoLivreResultado> {
+  await requireSession();
+  const termo = query.trim();
+  if (!termo) return { ok: true, resultados: [] };
+  return buscarProdutosMercadoLivre(termo);
+}
+
+async function obterOuCriarLojaMercadoLivre(): Promise<string> {
+  const [existente] = await db.select().from(schema.lojas).where(eq(schema.lojas.fonte, "MERCADO_LIVRE")).limit(1);
+  if (existente) return existente.id;
+
+  const [nova] = await db
+    .insert(schema.lojas)
+    .values({ nome: "Mercado Livre", tipo: "ONLINE", fonte: "MERCADO_LIVRE" })
+    .returning();
+  if (!nova) throw new Error("Não foi possível registrar a loja Mercado Livre.");
+  return nova.id;
+}
+
+/**
+ * Importa um resultado de busca do Mercado Livre como oferta real, com
+ * proveniência completa: fonte, URL do anúncio, confiança "CONFIRMADO"
+ * (é o preço publicado agora pelo próprio vendedor, via API oficial) e a
+ * data de captura. Vira também uma observação de preço (histórico).
+ */
+export async function importarOfertaMercadoLivre(
+  produtoId: string,
+  resultado: { mlId: string; titulo: string; precoCent: number; permalink: string },
+): Promise<FormState> {
+  await requireSession();
+
+  if (!produtoId) return { error: "Selecione um produto do catálogo antes de importar." };
+
+  const lojaId = await obterOuCriarLojaMercadoLivre();
+
+  await db.insert(schema.ofertas).values({
+    produtoId,
+    lojaId,
+    precoCent: resultado.precoCent,
+    unidade: "un",
+    fonte: "MERCADO_LIVRE",
+    fonteUrl: resultado.permalink,
+    confianca: "CONFIRMADO",
+  });
+
+  await db.insert(schema.priceObservations).values({
+    produtoId,
+    lojaId,
+    precoCent: resultado.precoCent,
+    fonte: "MERCADO_LIVRE",
+    fonteUrl: resultado.permalink,
+  });
 
   revalidatePath("/compras");
   return {};

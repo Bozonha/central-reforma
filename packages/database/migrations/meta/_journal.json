@@ -8,6 +8,20 @@
       "when": 1789053158729,
       "tag": "0000_puzzling_firelord",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789131112852,
+      "tag": "0001_public_vance_astro",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789132622259,
+      "tag": "0002_broken_puck",
+      "breakpoints": true
     }
   ]
 }

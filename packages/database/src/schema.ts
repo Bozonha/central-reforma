@@ -60,6 +60,16 @@ export const obras = pgTable("obras", {
   longitude: real("longitude"),
   geocodificadoEm: timestamp("geocodificado_em", { mode: "date" }),
 
+  // Perfil de deslocamento (packages/domain/src/logistics.ts) — usado para
+  // calcular o custo efetivo de uma oferta com retirada local (preço +
+  // combustível + pedágio + estacionamento). Sempre informado pelo usuário,
+  // nunca estimado: se algum destes faltar, o cálculo diz explicitamente o
+  // que falta em vez de assumir um valor (CLAUDE.md #1).
+  combustivelPrecoLitroCent: integer("combustivel_preco_litro_cent"),
+  veiculoKmPorLitro: real("veiculo_km_por_litro"),
+  pedagioCent: integer("pedagio_cent"),
+  estacionamentoCent: integer("estacionamento_cent"),
+
   criadoEm: createdAt(),
   atualizadoEm: timestamp("atualizado_em", { mode: "date" }).notNull().defaultNow().$onUpdateFn(() => new Date()),
 });
@@ -138,6 +148,23 @@ export const priceObservations = pgTable("price_observations", {
   fonte: text("fonte").notNull(),
   fonteUrl: text("fonte_url"),
   capturadoEm: createdAt(),
+});
+
+/**
+ * Credenciais OAuth2 da integração oficial com o Mercado Livre (decisão B.4
+ * — "MVP 1 usa Mercado Livre via API oficial"). Uma única linha para o app
+ * inteiro (não é por usuário do Central de Reforma): quem conecta é o app,
+ * usando o client_id/client_secret cadastrados no portal de developers do
+ * Mercado Livre (env vars, nunca no código). O refresh_token é de uso único
+ * — cada renovação grava um novo por cima do anterior (lib/mercado/mercadolivre/client.ts).
+ */
+export const mercadoLivreToken = pgTable("mercado_livre_token", {
+  id: id(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiraEm: timestamp("expira_em", { mode: "date" }).notNull(),
+  usuarioMlId: text("usuario_ml_id"),
+  atualizadoEm: timestamp("atualizado_em", { mode: "date" }).notNull().defaultNow().$onUpdateFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------

@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useRef, useEffect } from "react";
+import { useActionState, useRef } from "react";
 import { Button } from "../../../components/ui/button";
 import { Field, Input, Select } from "../../../components/ui/form";
 import type { FormState } from "../../../../lib/obras/actions";
+import { useFormLifecycle } from "../../../../lib/forms/use-form-lifecycle";
 import type { OpcaoSelect } from "./compra-form";
 
 const INITIAL_STATE: FormState = {};
@@ -19,14 +20,7 @@ export function OfertaForm({
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   const formRef = useRef<HTMLFormElement>(null);
-  const wasPending = useRef(false);
-
-  useEffect(() => {
-    if (wasPending.current && !pending && !state.error && !state.fieldErrors) {
-      formRef.current?.reset();
-    }
-    wasPending.current = pending;
-  }, [pending, state]);
+  useFormLifecycle(formRef, state, pending);
 
   if (produtos.length === 0 || lojas.length === 0) {
     return (
@@ -67,6 +61,24 @@ export function OfertaForm({
       </Field>
       <Field label="Unidade" htmlFor="unidade" error={state.fieldErrors?.unidade}>
         <Input id="unidade" name="unidade" required placeholder="m², un..." />
+      </Field>
+      <Field
+        label="Frete (R$)"
+        htmlFor="frete"
+        error={state.fieldErrors?.frete}
+        hint="Só se aplica a loja online — para loja física o app calcula o custo de deslocamento."
+        className="col-span-2"
+      >
+        <Input id="frete" name="frete" inputMode="decimal" placeholder="0,00 (grátis) ou em branco (não informado)" />
+      </Field>
+      <Field
+        label="Link da oferta (opcional)"
+        htmlFor="fonteUrl"
+        error={state.fieldErrors?.fonteUrl}
+        hint="Guardado como prova de onde veio este preço."
+        className="col-span-2 sm:col-span-4"
+      >
+        <Input id="fonteUrl" name="fonteUrl" type="url" placeholder="https://..." />
       </Field>
       <div className="col-span-2 flex items-end sm:col-span-6">
         <Button type="submit" icon="plus" loading={pending}>

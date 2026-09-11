@@ -25,3 +25,16 @@ export const colaboradorSchema = z.object({
   email: z.string().trim().toLowerCase().email("E-mail inválido."),
   papel: z.enum(["COLABORADOR", "VISUALIZADOR"]),
 });
+
+/**
+ * Perfil de deslocamento da obra (packages/domain/src/logistics.ts) — usado
+ * para calcular o custo efetivo de ofertas com retirada local. Todos os
+ * campos são opcionais: sem eles, o cálculo de deslocamento simplesmente diz
+ * o que falta em vez de assumir um valor (CLAUDE.md #1).
+ */
+export const logisticaSchema = z.object({
+  combustivelPrecoLitro: z.string().optional(),
+  veiculoKmPorLitro: z.string().optional(),
+  pedagio: z.string().optional(),
+  estacionamento: z.string().optional(),
+});

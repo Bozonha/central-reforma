@@ -6,13 +6,16 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
-import { ambienteSchema, colaboradorSchema, obraSchema } from "../validation/obra";
+import { ambienteSchema, colaboradorSchema, logisticaSchema, obraSchema } from "../validation/obra";
 import { reaisToCents } from "@central-reforma/domain";
+import { valoresDoFormulario, type FormState } from "../forms/state";
 
-export interface FormState {
-  error?: string;
-  fieldErrors?: Record<string, string>;
-}
+// Reexportado como tipo (sem custo em runtime) para não obrigar todo
+// formulário a saber que `FormState` mora em lib/forms/state — um módulo
+// "use server" pode reexportar tipos livremente, só não pode reexportar a
+// função `valoresDoFormulario` (Next exige que todo export de valor deste
+// arquivo seja uma Server Action assíncrona).
+export type { FormState };
 
 function parseDate(value?: string): Date | undefined {
   if (!value) return undefined;
@@ -46,7 +49,7 @@ export async function criarObra(_prev: FormState, formData: FormData): Promise<F
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const data = parsed.data;
@@ -105,7 +108,7 @@ export async function atualizarObra(obraId: string, _prev: FormState, formData: 
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const data = parsed.data;
@@ -160,6 +163,45 @@ export async function reativarObra(obraId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Perfil de deslocamento (custo efetivo de ofertas com retirada local —
+// packages/domain/src/logistics.ts)
+// ---------------------------------------------------------------------------
+
+export async function atualizarLogisticaObra(obraId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  const sessao = await requireSession();
+  await requireObraAccess(sessao.usuarioId, obraId, "COLABORADOR");
+
+  const parsed = logisticaSchema.safeParse({
+    combustivelPrecoLitro: formData.get("combustivelPrecoLitro") || undefined,
+    veiculoKmPorLitro: formData.get("veiculoKmPorLitro") || undefined,
+    pedagio: formData.get("pedagio") || undefined,
+    estacionamento: formData.get("estacionamento") || undefined,
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
+    return { fieldErrors, values: valoresDoFormulario(formData) };
+  }
+
+  const combustivelPrecoLitroCent = parsed.data.combustivelPrecoLitro
+    ? reaisToCents(parseNumberInput(parsed.data.combustivelPrecoLitro) ?? 0)
+    : null;
+  const veiculoKmPorLitro = parsed.data.veiculoKmPorLitro ? (parseNumberInput(parsed.data.veiculoKmPorLitro) ?? null) : null;
+  const pedagioCent = parsed.data.pedagio ? reaisToCents(parseNumberInput(parsed.data.pedagio) ?? 0) : null;
+  const estacionamentoCent = parsed.data.estacionamento
+    ? reaisToCents(parseNumberInput(parsed.data.estacionamento) ?? 0)
+    : null;
+
+  await db
+    .update(schema.obras)
+    .set({ combustivelPrecoLitroCent, veiculoKmPorLitro, pedagioCent, estacionamentoCent })
+    .where(eq(schema.obras.id, obraId));
+
+  revalidatePath("/compras");
+  return {};
+}
+
+// ---------------------------------------------------------------------------
 // Ambientes
 // ---------------------------------------------------------------------------
 
@@ -178,7 +220,7 @@ export async function criarAmbiente(obraId: string, _prev: FormState, formData: 
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const data = parsed.data;
