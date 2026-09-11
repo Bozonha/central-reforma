@@ -78,7 +78,7 @@ export function AppShell({ children, sessao }: { children: ReactNode; sessao: Se
         <BrandMark />
         <NavLinks />
         <div className="border-t border-[var(--color-border)] px-5 py-4 text-xs text-[var(--color-text-faint)]">
-          Dados reais · SQLite local
+          Dados reais · Postgres (Neon)
         </div>
       </aside>
 

@@ -5,11 +5,12 @@
  * obra/ambiente/compra/etc. em nenhuma server action deve pular esta função.
  *
  * Nota sobre defesa em profundidade: o desenho original previa checagem na
- * aplicação *e* Row-Level Security no Postgres como segunda camada. Como o
- * banco atual é SQLite (decisão temporária, ver packages/database/src/schema.ts),
- * só existe a camada de aplicação por enquanto — motivo a mais para nunca
- * pular esta função. RLS volta a existir quando o Postgres for adotado
- * (policies já esboçadas em packages/database/prisma/rls-notes.sql).
+ * aplicação *e* Row-Level Security no Postgres como segunda camada (CLAUDE.md
+ * #6). O banco em produção já é Postgres via Neon (ver packages/database/src/client.ts),
+ * mas as policies de RLS (esboçadas em packages/database/prisma/rls-notes.sql)
+ * ainda não foram aplicadas — hoje só existe a camada de aplicação. Isso é uma
+ * lacuna real em relação à regra #6, não apenas um "ainda não chegou a vez":
+ * aplicar RLS no Neon é trabalho pendente, não concluído por esta função.
  */
 import { db, schema } from "@central-reforma/database";
 import { and, eq } from "drizzle-orm";
