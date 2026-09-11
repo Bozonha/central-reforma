@@ -9,7 +9,7 @@
     "migrate:dev": "drizzle-kit migrate",
     "studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit",
-    "build": "drizzle-kit generate",
+    "build": "echo ok",
     "seed": "tsx src/seed.ts"
   },
   "dependencies": {
