@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Pre-commit hook do Central de Reforma.
+#
+# Ativado via `git config core.hooksPath .githooks` (feito automaticamente
+# pelo script "prepare" do package.json raiz ao rodar `npm install`).
+#
+# Implementa a regra 37 do escopo mestre: "impedir secrets" e "impedir
+# commits problemáticos". Mantido deliberadamente simples (sem dependência
+# externa como husky/gitleaks) para não adicionar peso ao projeto — trocar
+# por uma ferramenta dedicada quando/se isso deixar de ser suficiente.
+
+set -euo pipefail
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+fail=0
+
+# 1) Nunca permitir arquivo .env de verdade no commit (mesmo com -f).
+for f in $STAGED_FILES; do
+  case "$f" in
+    *.env|*.env.*|.env)
+      echo "pre-commit: bloqueado — '$f' parece um arquivo de variáveis de ambiente. Nunca commitar segredos."
+      fail=1
+      ;;
+  esac
+done
+
+# 2) Varredura simples de padrões de segredo no diff staged.
+#    Não é exaustivo — é uma rede de segurança barata, não um scanner de verdade.
+SECRET_PATTERNS='(AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})'
+
+if git diff --cached -U0 | grep -Eq "$SECRET_PATTERNS"; then
+  echo "pre-commit: bloqueado — o diff em staged contém um padrão que parece uma credencial (chave AWS, chave privada, token de API, etc.)."
+  echo "Se for falso positivo, revise o padrão em .githooks/pre-commit."
+  fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+  exit 1
+fi
+
+# 3) Lint + typecheck do que já está com dependências instaladas.
+#    Se node_modules não existir ainda (checkout limpo sem `npm install`),
+#    pula com aviso em vez de travar o commit por um motivo não relacionado.
+if [ -d node_modules ]; then
+  echo "pre-commit: rodando lint..."
+  npm run lint --silent
+  echo "pre-commit: rodando typecheck..."
+  npm run typecheck --silent
+else
+  echo "pre-commit: node_modules não encontrado — pulando lint/typecheck (rode 'npm install' para ativar esta checagem)."
+fi
+
+exit 0

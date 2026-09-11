@@ -1,0 +1,137 @@
+-- rls-notes.sql
+--
+-- ATENCAO: este arquivo NAO e uma migration e NAO e aplicado ao banco.
+-- E apenas um esboco de referencia da politica de Row-Level Security (RLS)
+-- que devera ser implementada quando a autenticacao for adicionada (em uma
+-- etapa futura, fora do escopo do MVP 0).
+--
+-- Contexto (decisao de produto "B.5"): a tabela `obras` nao tem uma coluna de
+-- "dono". Quem tem acesso a uma Obra (e, por extensao, aos seus Ambientes) e
+-- determinado exclusivamente pela existencia de uma linha em
+-- `obra_colaboradores` ligando o usuario autenticado aquela obra. O acesso
+-- NUNCA deve ser resolvido checando uma coluna de dono direta em `obras`,
+-- porque essa coluna nao existe e nao vai existir.
+--
+-- Mecanismo de identidade do usuario atual: a ser definido na etapa de auth.
+-- O esboco abaixo assume que a aplicacao define, por conexao/transacao, uma
+-- setting customizada do Postgres com o id do usuario autenticado, por
+-- exemplo via:
+--
+--   SELECT set_config('app.current_user_id', '<usuarioId>', true);
+--
+-- e as policies leem esse valor com current_setting('app.current_user_id', true).
+-- Esse mecanismo (setting de sessao vs. outra estrategia, ex: JWT claims via
+-- extensao, role por usuario, etc.) sera decidido e implementado junto com a
+-- autenticacao. O que segue e apenas o esqueleto pretendido.
+
+-- =============================================================================
+-- ESBOCO (NAO APLICADO) — habilitar RLS e policies em `obras`
+-- =============================================================================
+
+-- ALTER TABLE obras ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE obras FORCE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY obras_select_colaborador ON obras
+--   FOR SELECT
+--   USING (
+--     EXISTS (
+--       SELECT 1
+--       FROM obra_colaboradores oc
+--       WHERE oc.obra_id = obras.id
+--         AND oc.usuario_id = current_setting('app.current_user_id', true)
+--     )
+--   );
+--
+-- CREATE POLICY obras_update_colaborador ON obras
+--   FOR UPDATE
+--   USING (
+--     EXISTS (
+--       SELECT 1
+--       FROM obra_colaboradores oc
+--       WHERE oc.obra_id = obras.id
+--         AND oc.usuario_id = current_setting('app.current_user_id', true)
+--     )
+--   )
+--   WITH CHECK (
+--     EXISTS (
+--       SELECT 1
+--       FROM obra_colaboradores oc
+--       WHERE oc.obra_id = obras.id
+--         AND oc.usuario_id = current_setting('app.current_user_id', true)
+--     )
+--   );
+--
+-- CREATE POLICY obras_delete_colaborador ON obras
+--   FOR DELETE
+--   USING (
+--     EXISTS (
+--       SELECT 1
+--       FROM obra_colaboradores oc
+--       WHERE oc.obra_id = obras.id
+--         AND oc.usuario_id = current_setting('app.current_user_id', true)
+--     )
+--   );
+--
+-- Observacao: a policy de INSERT em `obras` precisara de uma regra propria
+-- (ex.: qualquer usuario autenticado pode criar uma Obra, desde que a
+-- aplicacao garanta, na mesma transacao, a criacao do ObraColaborador com
+-- papel DONO). Isso tambem sera desenhado na etapa de auth.
+
+-- =============================================================================
+-- ESBOCO (NAO APLICADO) — habilitar RLS e policies em `ambientes`
+-- =============================================================================
+
+-- ALTER TABLE ambientes ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE ambientes FORCE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY ambientes_select_colaborador ON ambientes
+--   FOR SELECT
+--   USING (
+--     EXISTS (
+--       SELECT 1
+--       FROM obra_colaboradores oc
+--       WHERE oc.obra_id = ambientes.obra_id
+--         AND oc.usuario_id = current_setting('app.current_user_id', true)
+--     )
+--   );
+--
+-- CREATE POLICY ambientes_update_colaborador ON ambientes
+--   FOR UPDATE
+--   USING (
+--     EXISTS (
+--       SELECT 1
+--       FROM obra_colaboradores oc
+--       WHERE oc.obra_id = ambientes.obra_id
+--         AND oc.usuario_id = current_setting('app.current_user_id', true)
+--     )
+--   )
+--   WITH CHECK (
+--     EXISTS (
+--       SELECT 1
+--       FROM obra_colaboradores oc
+--       WHERE oc.obra_id = ambientes.obra_id
+--         AND oc.usuario_id = current_setting('app.current_user_id', true)
+--     )
+--   );
+--
+-- CREATE POLICY ambientes_delete_colaborador ON ambientes
+--   FOR DELETE
+--   USING (
+--     EXISTS (
+--       SELECT 1
+--       FROM obra_colaboradores oc
+--       WHERE oc.obra_id = ambientes.obra_id
+--         AND oc.usuario_id = current_setting('app.current_user_id', true)
+--     )
+--   );
+
+-- =============================================================================
+-- FORA DE ESCOPO NESTA ETAPA
+-- =============================================================================
+-- - Nao ha migration correspondente a este arquivo.
+-- - Nao ha configuracao de conexao/role de banco para uso destas policies.
+-- - Papeis de leitura/escrita diferenciados por PapelColaborador (DONO,
+--   COLABORADOR, VISUALIZADOR) — por exemplo, VISUALIZADOR sem permissao de
+--   UPDATE/DELETE — tambem ficam para quando a autenticacao existir; o
+--   esboco acima trata todo colaborador da obra de forma igual apenas para
+--   ilustrar o mecanismo de RLS via `obra_colaboradores`.

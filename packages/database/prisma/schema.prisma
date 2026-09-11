@@ -1,0 +1,135 @@
+// Central de Reforma — schema Prisma do MVP 0.
+//
+// Escopo desta etapa: apenas as 4 entidades abaixo (Usuario, Obra, Ambiente,
+// ObraColaborador). Entidades de fases futuras do produto (Produto, Oferta,
+// Compra, etc.) NAO fazem parte deste schema e nao devem ser adicionadas aqui.
+//
+// Decisao de produto "B.5": a colaboracao por obra existe desde o MVP 0.
+// Obra nao possui uma coluna de "dono" — o dono e apenas o primeiro
+// ObraColaborador com papel DONO. Toda Obra deve ter pelo menos um
+// colaborador com papel DONO; essa regra NAO e expressa como constraint de
+// banco (Prisma/Postgres nao modelam bem "pelo menos um" via schema) e sera
+// validada na camada de aplicacao quando o fluxo de criacao de Obra for
+// implementado.
+//
+// Acesso via Row-Level Security: quando a autenticacao for implementada em
+// outra etapa, o acesso a Obra e Ambiente devera passar exclusivamente pela
+// tabela ObraColaborador, via politicas RLS do Postgres — nunca por checagem
+// de dono em coluna direta (nao existe tal coluna). Veja o esboco em
+// ./rls-notes.sql (ainda nao aplicado).
+
+// Prisma ORM 7: o cliente padrao ("prisma-client") e "Rust-free" — nao baixa
+// mais um binario de engine nativo. Em compensacao, o driver de banco (aqui,
+// Postgres) precisa ser fornecido explicitamente pela aplicacao via adapter
+// (@prisma/adapter-pg), instanciado em src/client.ts. O "output" abaixo e
+// obrigatorio nesta versao (nao ha mais um destino implicito em
+// @prisma/client).
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum ObraTipo {
+  CASA
+  APARTAMENTO
+  AMBIENTE_UNICO
+  OUTRO
+}
+
+enum ObraStatus {
+  ATIVA
+  ARQUIVADA
+}
+
+enum FonteMedida {
+  USUARIO
+  DOCUMENTO
+  VISAO_ESTIMADA
+  CONFIRMADA
+  DESCONHECIDA
+}
+
+enum PapelColaborador {
+  DONO
+  COLABORADOR
+  VISUALIZADOR
+}
+
+// ---------------------------------------------------------------------------
+// Entidades
+// ---------------------------------------------------------------------------
+
+model Usuario {
+  id       String   @id @default(cuid())
+  email    String   @unique
+  nome     String
+  criadoEm DateTime @default(now())
+
+  colaboracoes         ObraColaborador[] @relation("ObraColaboradorUsuario")
+  convitesFeitos       ObraColaborador[] @relation("ObraColaboradorConvidadoPor")
+
+  @@map("usuarios")
+}
+
+model Obra {
+  id               String     @id @default(cuid())
+  nome             String
+  tipo             ObraTipo
+  status           ObraStatus @default(ATIVA)
+  orcamentoTotal   Decimal?
+  dataInicio       DateTime?
+  dataFimPrevista  DateTime?
+  observacoes      String?
+  criadoEm         DateTime   @default(now())
+  atualizadoEm     DateTime   @updatedAt
+
+  ambientes     Ambiente[]
+  colaboradores ObraColaborador[]
+
+  @@map("obras")
+}
+
+model Ambiente {
+  id           String      @id @default(cuid())
+  obraId       String
+  nome         String
+  largura      Decimal?
+  comprimento  Decimal?
+  altura       Decimal?
+  fonteMedida  FonteMedida @default(USUARIO)
+  observacoes  String?
+  criadoEm     DateTime    @default(now())
+
+  obra Obra @relation(fields: [obraId], references: [id], onDelete: Cascade)
+
+  @@map("ambientes")
+}
+
+// Modela a colaboracao por Obra (decisao "B.5"): quem tem acesso a uma Obra e
+// com qual papel. O "dono" de uma Obra e apenas o primeiro registro aqui com
+// papel DONO — nao ha coluna de dono em Obra.
+model ObraColaborador {
+  id             String           @id @default(cuid())
+  obraId         String
+  usuarioId      String
+  papel          PapelColaborador
+  convidadoPorId String?
+  convidadoEm    DateTime         @default(now())
+  aceitoEm       DateTime?
+
+  obra         Obra     @relation(fields: [obraId], references: [id], onDelete: Cascade)
+  usuario      Usuario  @relation("ObraColaboradorUsuario", fields: [usuarioId], references: [id])
+  convidadoPor Usuario? @relation("ObraColaboradorConvidadoPor", fields: [convidadoPorId], references: [id])
+
+  @@unique([obraId, usuarioId])
+  @@map("obra_colaboradores")
+}
