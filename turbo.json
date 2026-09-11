@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["DATABASE_URL", "AUTH_SECRET", "NOMINATIM_USER_AGENT"],
   "tasks": {
     "generate": {
       "cache": true,
