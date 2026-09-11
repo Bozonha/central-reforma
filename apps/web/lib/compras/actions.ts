@@ -9,6 +9,7 @@ import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
 import { itemListaSchema, compraSchema } from "../validation/compras";
 import type { FormState } from "../obras/actions";
+import { valoresDoFormulario } from "../forms/state";
 
 function parseNumberInput(value?: string): number | undefined {
   if (!value) return undefined;
@@ -39,11 +40,12 @@ export async function criarItemLista(obraId: string, _prev: FormState, formData:
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const quantidade = parseNumberInput(parsed.data.quantidadeNecessaria);
-  if (quantidade === undefined) return { fieldErrors: { quantidadeNecessaria: "Quantidade inválida." } };
+  if (quantidade === undefined)
+    return { fieldErrors: { quantidadeNecessaria: "Quantidade inválida." }, values: valoresDoFormulario(formData) };
 
   await db.insert(schema.itensListaCompras).values({
     obraId,
@@ -97,13 +99,15 @@ export async function criarCompra(obraId: string, _prev: FormState, formData: Fo
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const quantidade = parseNumberInput(parsed.data.quantidade);
-  if (quantidade === undefined) return { fieldErrors: { quantidade: "Quantidade inválida." } };
+  if (quantidade === undefined)
+    return { fieldErrors: { quantidade: "Quantidade inválida." }, values: valoresDoFormulario(formData) };
   const precoUnitarioCent = reaisToCents(parseNumberInput(parsed.data.precoUnitario) ?? -1);
-  if (precoUnitarioCent < 0) return { fieldErrors: { precoUnitario: "Preço inválido." } };
+  if (precoUnitarioCent < 0)
+    return { fieldErrors: { precoUnitario: "Preço inválido." }, values: valoresDoFormulario(formData) };
 
   const valorTotalCent = Math.round(precoUnitarioCent * quantidade);
   const data = parseDate(parsed.data.data) ?? new Date();

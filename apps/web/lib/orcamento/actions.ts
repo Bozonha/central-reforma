@@ -8,6 +8,7 @@ import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
 import { linhaOrcamentoSchema } from "../validation/orcamento";
 import type { FormState } from "../obras/actions";
+import { valoresDoFormulario } from "../forms/state";
 
 export async function criarLinhaOrcamento(obraId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const sessao = await requireSession();
@@ -22,11 +23,12 @@ export async function criarLinhaOrcamento(obraId: string, _prev: FormState, form
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const planejadoCent = parseBRLToCents(parsed.data.planejado);
-  if (planejadoCent == null) return { fieldErrors: { planejado: "Valor inválido." } };
+  if (planejadoCent == null)
+    return { fieldErrors: { planejado: "Valor inválido." }, values: valoresDoFormulario(formData) };
 
   await db.insert(schema.linhasOrcamento).values({
     obraId,

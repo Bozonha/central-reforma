@@ -1,23 +1,17 @@
 "use client";
 
-import { useActionState, useRef, useEffect } from "react";
+import { useActionState, useRef } from "react";
 import { Button } from "../../../components/ui/button";
 import { Field, Input } from "../../../components/ui/form";
 import type { FormState } from "../../../../lib/obras/actions";
+import { useFormLifecycle } from "../../../../lib/forms/use-form-lifecycle";
 
 const INITIAL_STATE: FormState = {};
 
 export function ItemEstoqueForm({ action }: { action: (prev: FormState, formData: FormData) => Promise<FormState> }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   const formRef = useRef<HTMLFormElement>(null);
-  const wasPending = useRef(false);
-
-  useEffect(() => {
-    if (wasPending.current && !pending && !state.error && !state.fieldErrors) {
-      formRef.current?.reset();
-    }
-    wasPending.current = pending;
-  }, [pending, state]);
+  useFormLifecycle(formRef, state, pending);
 
   return (
     <form ref={formRef} action={formAction} className="grid grid-cols-2 gap-3 sm:grid-cols-5">

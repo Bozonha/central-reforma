@@ -8,6 +8,7 @@ import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
 import { tarefaSchema } from "../validation/cronograma";
 import type { FormState } from "../obras/actions";
+import { valoresDoFormulario } from "../forms/state";
 
 function parseDate(value?: string): Date | undefined {
   if (!value) return undefined;
@@ -36,14 +37,15 @@ export async function criarTarefa(obraId: string, _prev: FormState, formData: Fo
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const inicio = parseDate(parsed.data.inicio);
   const fim = parseDate(parsed.data.fim);
-  if (parsed.data.inicio && !inicio) return { fieldErrors: { inicio: "Data inválida." } };
-  if (parsed.data.fim && !fim) return { fieldErrors: { fim: "Data inválida." } };
-  if (inicio && fim && fim < inicio) return { fieldErrors: { fim: "Fim não pode ser antes do início." } };
+  const values = valoresDoFormulario(formData);
+  if (parsed.data.inicio && !inicio) return { fieldErrors: { inicio: "Data inválida." }, values };
+  if (parsed.data.fim && !fim) return { fieldErrors: { fim: "Data inválida." }, values };
+  if (inicio && fim && fim < inicio) return { fieldErrors: { fim: "Fim não pode ser antes do início." }, values };
 
   await db.insert(schema.tarefas).values({
     obraId,

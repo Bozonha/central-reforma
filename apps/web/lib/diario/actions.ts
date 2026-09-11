@@ -7,6 +7,7 @@ import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
 import { entradaDiarioSchema } from "../validation/diario";
 import type { FormState } from "../obras/actions";
+import { valoresDoFormulario } from "../forms/state";
 
 function parseDate(value?: string): Date | undefined {
   if (!value) return undefined;
@@ -25,7 +26,7 @@ export async function criarEntradaDiario(obraId: string, _prev: FormState, formD
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const data = parseDate(parsed.data.data) ?? new Date();

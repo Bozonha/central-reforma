@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef } from "react";
 import { OBRA_TIPOS } from "@central-reforma/domain";
 import { Button } from "../../../components/ui/button";
 import { Field, Input, Select, Textarea } from "../../../components/ui/form";
 import type { FormState } from "../../../../lib/obras/actions";
+import { useFormLifecycle } from "../../../../lib/forms/use-form-lifecycle";
 
 const INITIAL_STATE: FormState = {};
 
@@ -38,9 +39,11 @@ export function ObraForm({
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const formRef = useRef<HTMLFormElement>(null);
+  useFormLifecycle(formRef, state, pending);
 
   return (
-    <form action={formAction} className="flex flex-col gap-5">
+    <form ref={formRef} action={formAction} className="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Nome da obra" htmlFor="nome" error={state.fieldErrors?.nome} className="sm:col-span-2">
           <Input id="nome" name="nome" required defaultValue={defaults?.nome} placeholder="Reforma do apartamento" />
@@ -62,7 +65,9 @@ export function ObraForm({
             name="orcamentoTotal"
             inputMode="decimal"
             placeholder="50000,00"
-            defaultValue={defaults?.orcamentoTotalCent != null ? (defaults.orcamentoTotalCent / 100).toFixed(2) : ""}
+            defaultValue={
+              defaults?.orcamentoTotalCent != null ? (defaults.orcamentoTotalCent / 100).toFixed(2).replace(".", ",") : ""
+            }
           />
         </Field>
 

@@ -7,6 +7,7 @@ import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
 import { itemEstoqueSchema } from "../validation/estoque";
 import type { FormState } from "../obras/actions";
+import { valoresDoFormulario } from "../forms/state";
 
 export async function criarItemEstoque(obraId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const sessao = await requireSession();
@@ -20,11 +21,12 @@ export async function criarItemEstoque(obraId: string, _prev: FormState, formDat
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
-    return { fieldErrors };
+    return { fieldErrors, values: valoresDoFormulario(formData) };
   }
 
   const quantidade = Number(parsed.data.quantidade.replace(",", "."));
-  if (Number.isNaN(quantidade)) return { fieldErrors: { quantidade: "Quantidade inválida." } };
+  if (Number.isNaN(quantidade))
+    return { fieldErrors: { quantidade: "Quantidade inválida." }, values: valoresDoFormulario(formData) };
 
   await db.insert(schema.itensEstoque).values({
     obraId,
