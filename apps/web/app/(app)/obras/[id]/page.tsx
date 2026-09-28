@@ -1,7 +1,7 @@
 import { db, schema } from "@central-reforma/database";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { areaAmbiente, centsToBRL, labelFonteMedida, OBRA_TIPOS } from "@central-reforma/domain";
+import { areaAmbiente, centsToBRL, labelFonteMedida, OBRA_TIPOS, type FonteMedida } from "@central-reforma/domain";
 import { requireSession } from "../../../../lib/auth/actions";
 import { requireObraAccess, AcessoNegadoError } from "../../../../lib/auth/obra-access";
 import {
@@ -166,7 +166,7 @@ export default async function ObraDetalhePage({ params }: { params: Promise<{ id
                         </td>
                         <td className="py-2.5 text-[var(--color-text-muted)]">{area != null ? `${area.toFixed(2)} m²` : "—"}</td>
                         <td className="py-2.5">
-                          <Badge tone="neutral">{labelFonteMedida(a.fonteMedida as any)}</Badge>
+                          <Badge tone="neutral">{labelFonteMedida(a.fonteMedida as FonteMedida)}</Badge>
                         </td>
                         {podeEditar ? (
                           <td className="py-2.5 text-right">

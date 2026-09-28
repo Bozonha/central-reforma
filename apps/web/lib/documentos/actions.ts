@@ -3,7 +3,7 @@
 import { db, schema } from "@central-reforma/database";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { del, put } from "@vercel/blob";
 import path from "node:path";
 import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
@@ -28,6 +28,15 @@ function extensaoSegura(nomeOriginal: string): string {
   return /^\.[a-z0-9]{1,8}$/.test(ext) ? ext : "";
 }
 
+/**
+ * Armazenamento de arquivos: usa o Vercel Blob (`@vercel/blob`), não o
+ * filesystem local. O filesystem de uma função serverless/edge na Vercel é
+ * efêmero (não persiste entre requisições/deploys), então gravar em
+ * `public/uploads` como antes nunca teria funcionado em produção — só
+ * parecia funcionar em `next dev` local. Requer a env var
+ * `BLOB_READ_WRITE_TOKEN` (criada automaticamente ao conectar um Blob store
+ * ao projeto na Vercel).
+ */
 export async function enviarDocumento(obraId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const sessao = await requireSession();
   await requireObraAccess(sessao.usuarioId, obraId, "COLABORADOR");
@@ -50,19 +59,24 @@ export async function enviarDocumento(obraId: string, _prev: FormState, formData
 
   const id = crypto.randomUUID();
   const ext = extensaoSegura(arquivo.name);
-  const nomeArmazenado = `${id}${ext}`;
-  const diretorio = path.join(process.cwd(), "public", "uploads", obraId);
-  await mkdir(diretorio, { recursive: true });
-  const destino = path.join(diretorio, nomeArmazenado);
-  const bytes = Buffer.from(await arquivo.arrayBuffer());
-  await writeFile(destino, bytes);
+  const caminhoBlob = `${obraId}/${id}${ext}`;
 
-  const arquivoUrl = `/uploads/${obraId}/${nomeArmazenado}`;
+  let blobUrl: string;
+  try {
+    const blob = await put(caminhoBlob, arquivo, {
+      access: "public",
+      contentType: arquivo.type,
+      addRandomSuffix: false,
+    });
+    blobUrl = blob.url;
+  } catch {
+    return { error: "Não consegui salvar o arquivo. Tente novamente em instantes." };
+  }
 
   await db.insert(schema.documentos).values({
     obraId,
     tipo,
-    arquivoUrl,
+    arquivoUrl: blobUrl,
     nomeArquivo: arquivo.name,
     tamanhoBytes: arquivo.size,
     mimeType: arquivo.type,
@@ -86,8 +100,7 @@ export async function excluirDocumento(obraId: string, documentoId: string): Pro
   await db.delete(schema.documentos).where(and(eq(schema.documentos.id, documentoId), eq(schema.documentos.obraId, obraId)));
 
   if (doc) {
-    const caminho = path.join(process.cwd(), "public", doc.arquivoUrl.replace(/^\//, ""));
-    await unlink(caminho).catch(() => {});
+    await del(doc.arquivoUrl).catch(() => {});
   }
 
   revalidatePath("/documentos");

@@ -35,7 +35,12 @@ export type IconName =
   | "external-link"
   | "filter"
   | "archive"
-  | "loader";
+  | "loader"
+  | "sparkles";
+
+const sparklesPath = (
+  <path d="M12 3v3M12 18v3M4.5 4.5l2.1 2.1M17.4 17.4l2.1 2.1M3 12h3M18 12h3M4.5 19.5l2.1-2.1M17.4 6.6l2.1-2.1M12 8l1.2 2.8L16 12l-2.8 1.2L12 16l-1.2-2.8L8 12l2.8-1.2L12 8Z" />
+);
 
 const paths: Record<IconName, ReactNode> = {
   dashboard: (
@@ -78,6 +83,7 @@ const paths: Record<IconName, ReactNode> = {
   "external-link": <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6m3-2h6v6m0-6L10 14" />,
   filter: <path d="M4 5h16l-6 8v6l-4 2v-8Z" />,
   archive: <path d="M3 5h18v4H3zM5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4" />,
+  sparkles: sparklesPath,
   loader: <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.5-6.5-2.1 2.1M8.6 15.4l-2.1 2.1m0-11 2.1 2.1m8.8 8.8 2.1 2.1" />,
 };
 

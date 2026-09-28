@@ -10,6 +10,7 @@ import { LinkButton } from "../../components/ui/button";
 import { Icon } from "../../components/icons";
 import { ObraSelector } from "../components/obra-selector";
 import { DocumentoForm } from "./components/documento-form";
+import { AnalisarPlantaButton } from "./components/analisar-planta-button";
 
 const TIPO_LABEL = Object.fromEntries(TIPOS_DOCUMENTO.map((t) => [t.value, t.label]));
 
@@ -110,14 +111,17 @@ export default async function DocumentosPage({
                       <td className="py-2.5 text-[var(--color-text-muted)]">{formatTamanho(doc.tamanhoBytes)}</td>
                       <td className="py-2.5 text-[var(--color-text-muted)]">{formatData(doc.dataUpload)}</td>
                       <td className="py-2.5 text-right">
-                        <form action={excluirDocumento.bind(null, obraId, doc.id)}>
-                          <button
-                            type="submit"
-                            className="rounded-md p-1.5 text-[var(--color-text-faint)] hover:bg-[var(--color-serious-soft)] hover:text-[var(--color-serious)]"
-                          >
-                            <Icon name="trash" className="h-4 w-4" />
-                          </button>
-                        </form>
+                        <div className="flex items-center justify-end gap-2">
+                          {doc.tipo === "PLANTA" ? <AnalisarPlantaButton obraId={obraId} documentoId={doc.id} /> : null}
+                          <form action={excluirDocumento.bind(null, obraId, doc.id)}>
+                            <button
+                              type="submit"
+                              className="rounded-md p-1.5 text-[var(--color-text-faint)] hover:bg-[var(--color-serious-soft)] hover:text-[var(--color-serious)]"
+                            >
+                              <Icon name="trash" className="h-4 w-4" />
+                            </button>
+                          </form>
+                        </div>
                       </td>
                     </tr>
                   ))}

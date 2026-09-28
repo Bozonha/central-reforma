@@ -9,12 +9,25 @@ export interface DashboardOrcamentoRow {
   pago: number;
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+interface TooltipPayloadItem {
+  dataKey: string;
+  name: string;
+  value: number;
+  fill?: string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+  label?: string;
+}
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs shadow-[var(--shadow-raised)]">
       <p className="mb-1 font-medium text-[var(--color-text)]">{label}</p>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <div key={p.dataKey} className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full" style={{ background: p.fill }} />
           <span className="text-[var(--color-text-muted)]">{p.name}:</span>
