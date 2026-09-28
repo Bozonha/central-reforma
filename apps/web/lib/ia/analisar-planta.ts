@@ -25,10 +25,15 @@ export type ResultadoAnalisePlanta =
 
 const MIME_SUPORTADOS = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
-// Modelo gratuito do Gemini (Google AI Studio): 15 req/min, 1.500 req/dia,
-// mais do que suficiente para o uso de uma obra real. Ver GEMINI_API_KEY
-// nas variáveis de ambiente do projeto na Vercel.
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Modelo gratuito do Gemini (Google AI Studio): ~1.500 req/dia, mais do
+// que suficiente para o uso de uma obra real. Ver GEMINI_API_KEY nas
+// variáveis de ambiente do projeto na Vercel.
+//
+// A Google descontinua versões antigas periodicamente para contas novas
+// (ex.: gemini-2.5-flash parou de funcionar em 2026-09-28, substituído
+// por este). Se voltar a dar erro "no longer available", a própria
+// resposta da API costuma dizer qual modelo usar no lugar — troque aqui.
+const GEMINI_MODEL = "gemini-3.8-flash";
 
 const SYSTEM_PROMPT = `Você é um assistente técnico que lê plantas baixas (imagem ou PDF) de apartamentos ou casas e extrai os ambientes com suas dimensões, quando visíveis na própria planta.
 
