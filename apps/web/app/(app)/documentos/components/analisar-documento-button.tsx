@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "../../../components/ui/button";
 import { Icon } from "../../../components/icons";
-import { analisarPlanta, type ResultadoAnalisePlanta } from "../../../../lib/ia/analisar-planta";
+import { analisarDocumento, type ResultadoAnaliseDocumento } from "../../../../lib/ia/analisar-documento";
 
 const CONFIANCA_LABEL: Record<string, string> = {
   ALTA: "Alta",
@@ -23,14 +23,14 @@ function formatMetros(v: number | null) {
   return v === null ? "—" : `${v.toFixed(2)} m`;
 }
 
-export function AnalisarPlantaButton({ obraId, documentoId }: { obraId: string; documentoId: string }) {
+export function AnalisarDocumentoButton({ obraId, documentoId }: { obraId: string; documentoId: string }) {
   const [pending, startTransition] = useTransition();
-  const [resultado, setResultado] = useState<ResultadoAnalisePlanta | null>(null);
+  const [resultado, setResultado] = useState<ResultadoAnaliseDocumento | null>(null);
 
   function rodar() {
     setResultado(null);
     startTransition(async () => {
-      const r = await analisarPlanta(obraId, documentoId);
+      const r = await analisarDocumento(obraId, documentoId);
       setResultado(r);
     });
   }
@@ -42,7 +42,11 @@ export function AnalisarPlantaButton({ obraId, documentoId }: { obraId: string; 
       </Button>
 
       {resultado ? (
-        resultado.ok ? (
+        !resultado.ok ? (
+          <p className="rounded-lg border border-[var(--color-serious)]/30 bg-[var(--color-serious-soft)] p-3 text-sm text-[var(--color-serious)]">
+            {resultado.erro}
+          </p>
+        ) : resultado.tipo === "PLANTA" ? (
           <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-sm">
             <p className="mb-2 flex items-center gap-1.5 font-medium text-[var(--color-text)]">
               <Icon name="sparkles" className="h-4 w-4 text-[var(--color-primary)]" />
@@ -75,9 +79,51 @@ export function AnalisarPlantaButton({ obraId, documentoId }: { obraId: string; 
             </p>
           </div>
         ) : (
-          <p className="rounded-lg border border-[var(--color-serious)]/30 bg-[var(--color-serious-soft)] p-3 text-sm text-[var(--color-serious)]">
-            {resultado.erro}
-          </p>
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-sm">
+            <p className="mb-2 flex items-center gap-1.5 font-medium text-[var(--color-text)]">
+              <Icon name="sparkles" className="h-4 w-4 text-[var(--color-primary)]" />
+              {resultado.tipoIdentificado ?? "Documento analisado"}
+            </p>
+            <p className="mb-2 text-[var(--color-text)]">{resultado.resumo}</p>
+
+            {resultado.pontosChave.length > 0 ? (
+              <ul className="mb-2 flex flex-col gap-1">
+                {resultado.pontosChave.map((p, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-[var(--color-text-muted)]">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-[var(--color-text-faint)]" />
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {resultado.valores.length > 0 ? (
+              <ul className="mb-2 flex flex-wrap gap-1.5">
+                {resultado.valores.map((v, i) => (
+                  <li key={i} className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-text)]">
+                    {v}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {resultado.alertas.length > 0 ? (
+              <ul className="mb-2 flex flex-col gap-1">
+                {resultado.alertas.map((a, i) => (
+                  <li
+                    key={i}
+                    className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-soft)] px-2 py-1 text-xs text-[var(--color-warning)]"
+                  >
+                    {a}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <p className="mt-2 text-xs text-[var(--color-text-faint)]">
+              Resumo gerado por IA a partir do documento — confira o original antes de usar em compras ou orçamento.
+            </p>
+          </div>
         )
       ) : null}
     </div>

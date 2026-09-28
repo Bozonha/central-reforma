@@ -10,7 +10,9 @@ import { LinkButton } from "../../components/ui/button";
 import { Icon } from "../../components/icons";
 import { ObraSelector } from "../components/obra-selector";
 import { DocumentoForm } from "./components/documento-form";
-import { AnalisarPlantaButton } from "./components/analisar-planta-button";
+import { AnalisarDocumentoButton } from "./components/analisar-documento-button";
+
+const MIME_ANALISAVEL_POR_IA = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
 const TIPO_LABEL = Object.fromEntries(TIPOS_DOCUMENTO.map((t) => [t.value, t.label]));
 
@@ -112,7 +114,7 @@ export default async function DocumentosPage({
                       <td className="py-2.5 text-[var(--color-text-muted)]">{formatData(doc.dataUpload)}</td>
                       <td className="py-2.5 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {doc.tipo === "PLANTA" ? <AnalisarPlantaButton obraId={obraId} documentoId={doc.id} /> : null}
+                          {MIME_ANALISAVEL_POR_IA.has(doc.mimeType) ? <AnalisarDocumentoButton obraId={obraId} documentoId={doc.id} /> : null}
                           <form action={excluirDocumento.bind(null, obraId, doc.id)}>
                             <button
                               type="submit"
