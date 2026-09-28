@@ -1,6 +1,5 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
 import { db, schema } from "@central-reforma/database";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -26,6 +25,11 @@ export type ResultadoAnalisePlanta =
 
 const MIME_SUPORTADOS = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
+// Modelo gratuito do Gemini (Google AI Studio): 15 req/min, 1.500 req/dia,
+// mais do que suficiente para o uso de uma obra real. Ver GEMINI_API_KEY
+// nas variáveis de ambiente do projeto na Vercel.
+const GEMINI_MODEL = "gemini-2.5-flash";
+
 const SYSTEM_PROMPT = `Você é um assistente técnico que lê plantas baixas (imagem ou PDF) de apartamentos ou casas e extrai os ambientes com suas dimensões, quando visíveis na própria planta.
 
 REGRAS QUE VOCÊ DEVE SEGUIR SEMPRE:
@@ -35,7 +39,7 @@ REGRAS QUE VOCÊ DEVE SEGUIR SEMPRE:
   - "MEDIA": não há cota explícita, mas dá para estimar com razoável segurança pela escala indicada na planta (ex.: barra de escala, ou outra cota próxima conhecida).
   - "BAIXA": estimativa grosseira só por proporção visual entre ambientes, sem escala confiável.
   - "NAO_LEGIVEL": não foi possível determinar nada, mesmo aproximado.
-- Quando a confiança for "NAO_LEGIVEL", os campos larguraM/comprimentoM/alturaM devem ser null — não greve um número mesmo assim.
+- Quando a confiança for "NAO_LEGIVEL", os campos larguraM/comprimentoM/alturaM devem ser null — não crave um número mesmo assim.
 - Use nomes de ambiente em português, como aparecem na planta ou o mais próximo disso (ex.: "Sala", "Cozinha", "Quarto 1", "Suíte", "Banheiro", "Varanda", "Área de serviço", "Circulação").
 - Dimensões em metros (não centímetros), com até 2 casas decimais.
 - pé-direito (altura) raramente aparece em planta baixa 2D — se não estiver indicado, retorne null com confiança "NAO_LEGIVEL" para esse campo específico, mesmo que largura/comprimento tenham outra confiança.
@@ -59,10 +63,63 @@ function extrairJson(texto: string): { observacoesGerais?: string | null; ambien
 }
 
 /**
- * Lê uma planta (documento tipo PLANTA já enviado) com o Claude (visão),
- * extrai os ambientes com dimensões estimadas e grava/atualiza os
- * Ambientes da obra com fonteMedida = "VISAO_ESTIMADA". Nunca marca nada
- * como confirmado — é sempre uma estimativa que precisa ser conferida.
+ * Chama a API gratuita do Gemini (Google AI Studio) com a imagem/PDF da
+ * planta em base64 e devolve o texto bruto da resposta. Lança um erro com
+ * prefixo "SEM_CHAVE" se a variável de ambiente não estiver configurada,
+ * para o chamador distinguir isso de um erro de rede/quota.
+ */
+async function chamarGemini(base64: string, mimeType: string): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("SEM_CHAVE");
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+  const resposta = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inline_data: { mime_type: mimeType, data: base64 } },
+            { text: "Analise esta planta baixa e retorne o JSON conforme instruído no system prompt." },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 4096,
+      },
+    }),
+  });
+
+  if (!resposta.ok) {
+    const corpo = await resposta.text().catch(() => "");
+    if (resposta.status === 429) {
+      throw new Error("COTA_EXCEDIDA");
+    }
+    throw new Error(`GEMINI_HTTP_${resposta.status}: ${corpo.slice(0, 300)}`);
+  }
+
+  const json = await resposta.json();
+  const partes = json?.candidates?.[0]?.content?.parts as Array<{ text?: string }> | undefined;
+  const texto = partes?.map((p) => p.text ?? "").join("") ?? "";
+  if (!texto) {
+    throw new Error("RESPOSTA_VAZIA");
+  }
+  return texto;
+}
+
+/**
+ * Lê uma planta (documento tipo PLANTA já enviado) com o Gemini (visão,
+ * camada gratuita), extrai os ambientes com dimensões estimadas e
+ * grava/atualiza os Ambientes da obra com fonteMedida = "VISAO_ESTIMADA".
+ * Nunca marca nada como confirmado — é sempre uma estimativa que precisa
+ * ser conferida.
  */
 export async function analisarPlanta(obraId: string, documentoId: string): Promise<ResultadoAnalisePlanta> {
   const sessao = await requireSession();
@@ -80,11 +137,10 @@ export async function analisarPlanta(obraId: string, documentoId: string): Promi
     return { ok: false, erro: "Formato não suportado para análise por IA — use imagem (JPG/PNG/WEBP) ou PDF." };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  if (!process.env.GEMINI_API_KEY) {
     return {
       ok: false,
-      erro: "A variável de ambiente ANTHROPIC_API_KEY não está configurada no servidor. Configure-a nas variáveis de ambiente do projeto na Vercel e tente de novo.",
+      erro: "A variável de ambiente GEMINI_API_KEY não está configurada no servidor. Gere uma chave gratuita em aistudio.google.com/apikey, configure-a nas variáveis de ambiente do projeto na Vercel e tente de novo.",
     };
   }
 
@@ -98,34 +154,21 @@ export async function analisarPlanta(obraId: string, documentoId: string): Promi
     return { ok: false, erro: "Não consegui baixar o arquivo da planta para analisar." };
   }
 
-  const isPdf = doc.mimeType === "application/pdf";
-  const client = new Anthropic({ apiKey });
-
   let textoResposta: string;
   try {
-    const msg = await client.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: [
-            isPdf
-              ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: base64 } }
-              : {
-                  type: "image" as const,
-                  source: { type: "base64" as const, media_type: doc.mimeType as "image/jpeg" | "image/png" | "image/webp", data: base64 },
-                },
-            { type: "text" as const, text: "Analise esta planta baixa e retorne o JSON conforme instruído no system prompt." },
-          ],
-        },
-      ],
-    });
-    const bloco = msg.content.find((b) => b.type === "text");
-    textoResposta = bloco && bloco.type === "text" ? bloco.text : "";
+    textoResposta = await chamarGemini(base64, doc.mimeType);
   } catch (erro) {
-    return { ok: false, erro: `Erro ao chamar a IA: ${erro instanceof Error ? erro.message : "desconhecido"}.` };
+    const mensagem = erro instanceof Error ? erro.message : "desconhecido";
+    if (mensagem === "SEM_CHAVE") {
+      return {
+        ok: false,
+        erro: "A variável de ambiente GEMINI_API_KEY não está configurada no servidor. Gere uma chave gratuita em aistudio.google.com/apikey, configure-a nas variáveis de ambiente do projeto na Vercel e tente de novo.",
+      };
+    }
+    if (mensagem === "COTA_EXCEDIDA") {
+      return { ok: false, erro: "A cota gratuita do Gemini foi atingida por agora. Tente novamente em alguns minutos." };
+    }
+    return { ok: false, erro: `Erro ao chamar a IA: ${mensagem}.` };
   }
 
   const parsed = extrairJson(textoResposta);
@@ -143,7 +186,7 @@ export async function analisarPlanta(obraId: string, documentoId: string): Promi
     const legivel = confianca !== "NAO_LEGIVEL";
 
     const nota = [
-      `Estimado por IA a partir de "${doc.nomeArquivo}" em ${agora}.`,
+      `Estimado por IA (Gemini) a partir de "${doc.nomeArquivo}" em ${agora}.`,
       `Confiança: ${confianca}.`,
       amb.observacoes ? String(amb.observacoes) : null,
       "Confirme as medidas presencialmente antes de usar em compras ou orçamento.",

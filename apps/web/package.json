@@ -23,8 +23,7 @@
     "recharts": "^3.10.1",
     "leaflet": "^1.9.4",
     "react-leaflet": "^5.0.0",
-    "@vercel/blob": "^0.27.1",
-    "@anthropic-ai/sdk": "^0.128.0"
+    "@vercel/blob": "^0.27.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
