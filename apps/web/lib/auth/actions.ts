@@ -10,6 +10,10 @@ import { loginSchema, registroSchema } from "../validation/auth";
 export interface AuthFormState {
   error?: string;
   fieldErrors?: Record<string, string>;
+  /** Ver o comentário equivalente em lib/forms/state.ts — mesmo motivo:
+   * evitar chamar redirect() dentro de uma Server Action disparada via
+   * useActionState, que pode deixar a tela travada até um F5 manual. */
+  redirectTo?: string;
 }
 
 export async function registrarUsuario(
@@ -20,6 +24,7 @@ export async function registrarUsuario(
     nome: formData.get("nome"),
     email: formData.get("email"),
     senha: formData.get("senha"),
+    confirmaSenha: formData.get("confirmaSenha"),
   });
 
   if (!parsed.success) {
@@ -48,7 +53,7 @@ export async function registrarUsuario(
   }
 
   await createSessionCookie({ usuarioId: usuario.id, email: usuario.email, nome: usuario.nome });
-  redirect("/obras/nova?primeira=1");
+  return { redirectTo: "/obras/nova?primeira=1" };
 }
 
 export async function entrarComCredenciais(
@@ -81,7 +86,7 @@ export async function entrarComCredenciais(
   }
 
   await createSessionCookie({ usuarioId: usuario.id, email: usuario.email, nome: usuario.nome });
-  redirect("/");
+  return { redirectTo: "/" };
 }
 
 export async function sairDaConta(): Promise<void> {

@@ -36,7 +36,9 @@ export type IconName =
   | "filter"
   | "archive"
   | "loader"
-  | "sparkles";
+  | "sparkles"
+  | "eye"
+  | "eye-off";
 
 const sparklesPath = (
   <path d="M12 3v3M12 18v3M4.5 4.5l2.1 2.1M17.4 17.4l2.1 2.1M3 12h3M18 12h3M4.5 19.5l2.1-2.1M17.4 6.6l2.1-2.1M12 8l1.2 2.8L16 12l-2.8 1.2L12 16l-1.2-2.8L8 12l2.8-1.2L12 8Z" />
@@ -85,6 +87,8 @@ const paths: Record<IconName, ReactNode> = {
   archive: <path d="M3 5h18v4H3zM5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4" />,
   sparkles: sparklesPath,
   loader: <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.5-6.5-2.1 2.1M8.6 15.4l-2.1 2.1m0-11 2.1 2.1m8.8 8.8 2.1 2.1" />,
+  eye: <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />,
+  "eye-off": <path d="M3 3l18 18M10.6 5.2A10.9 10.9 0 0 1 12 5c6.4 0 10 7 10 7a17.9 17.9 0 0 1-4 5.1M6.3 6.3A17.6 17.6 0 0 0 2 12s3.6 7 10 7c1.4 0 2.6-.3 3.7-.7M9.9 9.9a3 3 0 0 0 4.2 4.2" />,
 };
 
 export function Icon({

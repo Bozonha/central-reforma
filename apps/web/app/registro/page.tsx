@@ -1,15 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef } from "react";
 import Link from "next/link";
 import { registrarUsuario, type AuthFormState } from "../../lib/auth/actions";
 import { Button } from "../components/ui/button";
 import { Field, Input } from "../components/ui/form";
+import { PasswordField } from "../components/ui/password-field";
+import { useFormLifecycle } from "../../lib/forms/use-form-lifecycle";
 
 const INITIAL_STATE: AuthFormState = {};
 
 export default function RegistroPage() {
   const [state, formAction, pending] = useActionState(registrarUsuario, INITIAL_STATE);
+  const formRef = useRef<HTMLFormElement>(null);
+  useFormLifecycle(formRef, state, pending);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] px-4 py-10">
@@ -23,6 +27,7 @@ export default function RegistroPage() {
         </div>
 
         <form
+          ref={formRef}
           action={formAction}
           className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card)]"
         >
@@ -33,9 +38,19 @@ export default function RegistroPage() {
             <Field label="E-mail" htmlFor="email" error={state.fieldErrors?.email}>
               <Input id="email" name="email" type="email" autoComplete="email" required placeholder="voce@exemplo.com" />
             </Field>
-            <Field label="Senha" htmlFor="senha" error={state.fieldErrors?.senha} hint="Mínimo de 8 caracteres.">
-              <Input id="senha" name="senha" type="password" autoComplete="new-password" required placeholder="••••••••" />
-            </Field>
+            <PasswordField
+              name="senha"
+              label="Senha"
+              autoComplete="new-password"
+              error={state.fieldErrors?.senha}
+              hint="Mínimo de 8 caracteres."
+            />
+            <PasswordField
+              name="confirmaSenha"
+              label="Confirme a senha"
+              autoComplete="new-password"
+              error={state.fieldErrors?.confirmaSenha}
+            />
 
             {state.error ? (
               <p className="rounded-lg bg-[var(--color-serious-soft)] px-3 py-2 text-xs text-[var(--color-serious)]">
