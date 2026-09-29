@@ -7,6 +7,7 @@ import { hashPassword, verifyPassword } from "./password";
 import { createSessionCookie, destroySessionCookie, getSession } from "./session";
 import { obterIpRequisicao, registrarTentativa, verificarRateLimit } from "./rate-limit";
 import { loginSchema, registroSchema } from "../validation/auth";
+import { garantirSuperAdminInicial } from "./rbac";
 
 export interface AuthFormState {
   error?: string;
@@ -52,6 +53,11 @@ export async function registrarUsuario(
   if (!usuario) {
     return { error: "Não foi possível criar a conta. Tente novamente." };
   }
+
+  // Se este é o primeiro usuário do sistema (nenhum SUPERADMIN ainda
+  // existe), ele vira SUPERADMIN automaticamente — sempre precisa existir
+  // alguém capaz de abrir o painel administrativo (lib/auth/rbac.ts).
+  await garantirSuperAdminInicial();
 
   await createSessionCookie({ usuarioId: usuario.id, email: usuario.email, nome: usuario.nome });
   return { redirectTo: "/obras/nova?primeira=1" };

@@ -46,16 +46,17 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+function NavLinks({ onNavigate, podeAcessarAdmin }: { onNavigate?: () => void; podeAcessarAdmin: boolean }) {
   const pathname = usePathname();
   // Lê o cookie e escuta o evento disparado por ObraSelector / ObraCookieSync
   // sempre que a obra ativa muda — assim a barra lateral fica sabendo, mesmo
   // sem remontar e sem depender de hooks de navegação.
   const obraAtiva = useSyncExternalStore(subscribeObraAtiva, getObraAtivaSnapshot, getObraAtivaServerSnapshot);
+  const itens = NAV_ITEMS.filter((item) => !item.admin || podeAcessarAdmin);
 
   return (
     <nav className="flex flex-1 flex-col gap-0.5 px-3 py-2">
-      {NAV_ITEMS.map((item) => {
+      {itens.map((item) => {
         const active = isActive(pathname, item.href);
         const href = item.crossObra && obraAtiva ? `${item.href}?obraId=${obraAtiva}` : item.href;
         return (
@@ -87,7 +88,15 @@ interface Sessao {
   email: string;
 }
 
-export function AppShell({ children, sessao }: { children: ReactNode; sessao: Sessao }) {
+export function AppShell({
+  children,
+  sessao,
+  podeAcessarAdmin,
+}: {
+  children: ReactNode;
+  sessao: Sessao;
+  podeAcessarAdmin: boolean;
+}) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const iniciais = sessao.nome
     .split(" ")
@@ -100,7 +109,7 @@ export function AppShell({ children, sessao }: { children: ReactNode; sessao: Se
     <div className="min-h-screen bg-[var(--color-bg)]">
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] md:flex">
         <BrandMark />
-        <NavLinks />
+        <NavLinks podeAcessarAdmin={podeAcessarAdmin} />
         <div className="border-t border-[var(--color-border)] px-5 py-4 text-xs text-[var(--color-text-faint)]">
           Dados reais · Postgres (Neon)
         </div>
@@ -126,7 +135,7 @@ export function AppShell({ children, sessao }: { children: ReactNode; sessao: Se
                 <Icon name="close" className="h-5 w-5" />
               </button>
             </div>
-            <NavLinks onNavigate={() => setMobileNavOpen(false)} />
+            <NavLinks onNavigate={() => setMobileNavOpen(false)} podeAcessarAdmin={podeAcessarAdmin} />
           </div>
         </div>
       )}

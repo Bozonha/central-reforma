@@ -11,6 +11,14 @@ export interface NavItem {
    * sempre cair na primeira obra do usuário.
    */
   crossObra?: boolean;
+  /**
+   * true só para o item "Administração" — a barra lateral só o mostra
+   * quando o papel de conta do usuário (SUPERADMIN/ADMIN) permite acessar o
+   * painel (ver podeAcessarPainelAdmin em packages/domain/src/rbac.ts). A
+   * página em si também checa isso de novo no servidor (defesa em
+   * profundidade) — este filtro é só para não anunciar um link que 404.
+   */
+  admin?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -23,4 +31,5 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Cronograma", href: "/cronograma", icon: "cronograma", crossObra: true },
   { label: "Documentos", href: "/documentos", icon: "documentos", crossObra: true },
   { label: "Diário", href: "/diario", icon: "diario", crossObra: true },
+  { label: "Administração", href: "/admin", icon: "users", admin: true },
 ];

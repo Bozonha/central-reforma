@@ -36,6 +36,13 @@
       "when": 1790689535056,
       "tag": "0004_nasty_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790698012923,
+      "tag": "0005_early_tarantula",
+      "breakpoints": true
     }
   ]
 }

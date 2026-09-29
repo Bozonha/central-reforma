@@ -39,6 +39,15 @@ export const usuarios = pgTable("usuarios", {
   email: text("email").notNull(),
   nome: text("nome").notNull(),
   senhaHash: text("senha_hash").notNull(),
+  /**
+   * Papel de CONTA (RBAC global, não confundir com PapelColaborador de
+   * ObraColaborador, que é por obra) — SUPERADMIN | ADMIN | USUARIO
+   * (packages/domain/src/rbac.ts). O primeiro usuário já cadastrado no
+   * sistema vira SUPERADMIN automaticamente (ver
+   * lib/auth/actions.ts#registrarUsuario) para sempre existir alguém capaz
+   * de administrar o painel; todos os demais nascem USUARIO.
+   */
+  papel: text("papel").notNull().default("USUARIO"),
   criadoEm: createdAt(),
 }, (t) => [uniqueIndex("usuarios_email_idx").on(t.email)]);
 
@@ -342,6 +351,24 @@ export const resetSenhaTokens = pgTable(
     criadoEm: createdAt(),
   },
   (t) => [uniqueIndex("reset_senha_tokens_token_hash_idx").on(t.tokenHash)],
+);
+
+/**
+ * Log de auditoria do RBAC (CLAUDE.md #2 por extensão — toda mudança de
+ * privilégio carrega proveniência: quem fez, quando, o quê). Append-only:
+ * nenhuma rota/action deve fazer UPDATE ou DELETE aqui.
+ */
+export const auditoriaLog = pgTable(
+  "auditoria_log",
+  {
+    id: id(),
+    atorUsuarioId: text("ator_usuario_id").notNull().references(() => usuarios.id),
+    acao: text("acao").notNull(),
+    alvoUsuarioId: text("alvo_usuario_id").references(() => usuarios.id),
+    detalhe: text("detalhe").notNull(),
+    criadoEm: createdAt(),
+  },
+  (t) => [index("auditoria_log_criado_em_idx").on(t.criadoEm)],
 );
 
 export const alertas = pgTable("alertas", {

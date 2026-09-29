@@ -5,3 +5,4 @@ export * from "./price-history";
 export * from "./orcamento";
 export * from "./logistics";
 export * from "./alertas";
+export * from "./rbac";
