@@ -91,7 +91,7 @@ export default async function ObraDetalhePage({ params }: { params: Promise<{ id
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card>
           <CardBody>
-            <p className="text-xs text-[var(--color-text-muted)]">Orçamento</p>
+            <p className="text-xs text-[var(--color-text-muted)]">Orçamento total</p>
             <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">
               {obra.orcamentoTotalCent != null ? centsToBRL(obra.orcamentoTotalCent) : "—"}
             </p>

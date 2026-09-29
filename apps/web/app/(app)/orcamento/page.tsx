@@ -38,7 +38,10 @@ export default async function OrcamentoPage({
     );
   }
 
-  const linhas = await db.select().from(schema.linhasOrcamento).where(eq(schema.linhasOrcamento.obraId, obraId));
+  const [linhas, [obra]] = await Promise.all([
+    db.select().from(schema.linhasOrcamento).where(eq(schema.linhasOrcamento.obraId, obraId)),
+    db.select({ orcamentoTotalCent: schema.obras.orcamentoTotalCent }).from(schema.obras).where(eq(schema.obras.id, obraId)),
+  ]);
   const resumo = resumirOrcamento(
     linhas.map((l) => ({
       categoria: l.categoria,
@@ -46,6 +49,7 @@ export default async function OrcamentoPage({
       compradoCent: l.compradoCent,
       pagoCent: l.pagoCent,
     })),
+    obra?.orcamentoTotalCent ?? null,
   );
 
   const criarLinhaComObra = criarLinhaOrcamento.bind(null, obraId);
@@ -65,6 +69,38 @@ export default async function OrcamentoPage({
         </div>
         <ObraSelector obras={obras} obraId={obraId} />
       </div>
+
+      {resumo.orcamentoTotalCent != null ? (
+        <Card>
+          <CardBody className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-[var(--color-text)]">
+              <span className="font-semibold">{centsToBRL(resumo.planejadoCent)}</span> planejados de{" "}
+              <span className="font-semibold">{centsToBRL(resumo.orcamentoTotalCent)}</span> disponíveis (orçamento total da obra)
+              {resumo.percentualPlanejadoDoTotal !== null ? ` · ${resumo.percentualPlanejadoDoTotal}%` : ""}
+            </p>
+            {resumo.planejadoExcedeTotal ? (
+              <span className="rounded-full bg-[var(--color-serious-soft)] px-2.5 py-1 text-xs font-medium text-[var(--color-serious)]">
+                Categorias somam mais que o orçamento total
+              </span>
+            ) : (
+              <span className="text-xs text-[var(--color-text-muted)]">
+                Restam {centsToBRL(resumo.disponivelCent ?? 0)} do orçamento total para novas categorias
+              </span>
+            )}
+          </CardBody>
+        </Card>
+      ) : (
+        <Card>
+          <CardBody>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              Esta obra não tem um orçamento total definido — os números abaixo somam só as categorias que você cadastrou aqui.{" "}
+              <a href={`/obras/${obraId}/editar`} className="font-medium text-[var(--color-primary)] hover:underline">
+                Definir orçamento total da obra
+              </a>
+            </p>
+          </CardBody>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card>
