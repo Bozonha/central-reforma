@@ -4,6 +4,7 @@ import { db, schema } from "@central-reforma/database";
 import type { StatusItemCompra } from "@central-reforma/domain";
 import { reaisToCents } from "@central-reforma/domain";
 import { and, eq } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
@@ -114,34 +115,47 @@ export async function criarCompra(obraId: string, _prev: FormState, formData: Fo
 
   const itemListaComprasId = formData.get("itemListaComprasId");
 
-  await db.insert(schema.compras).values({
-    obraId,
-    itemListaComprasId: itemListaComprasId ? String(itemListaComprasId) : null,
-    produtoId: parsed.data.produtoId ?? null,
-    lojaId: parsed.data.lojaId ?? null,
-    nomeLivre: parsed.data.nomeLivre,
-    quantidade,
-    precoUnitarioCent,
-    valorTotalCent,
-    formaPagamento: parsed.data.formaPagamento ?? null,
-    data,
-  });
+  // Até 3 gravações relacionadas (compra + observação de preço + status do
+  // item da lista) — agrupadas num único `db.batch` para que sejam atômicas.
+  // O driver `neon-http` não tem `db.transaction()` (é stateless por
+  // requisição HTTP), mas `db.batch([...])` envolve as queries numa
+  // transação real do Postgres via `client.transaction(...)` internamente.
+  const queries: BatchItem<"pg">[] = [
+    db.insert(schema.compras).values({
+      obraId,
+      itemListaComprasId: itemListaComprasId ? String(itemListaComprasId) : null,
+      produtoId: parsed.data.produtoId ?? null,
+      lojaId: parsed.data.lojaId ?? null,
+      nomeLivre: parsed.data.nomeLivre,
+      quantidade,
+      precoUnitarioCent,
+      valorTotalCent,
+      formaPagamento: parsed.data.formaPagamento ?? null,
+      data,
+    }),
+  ];
 
   if (parsed.data.produtoId && parsed.data.lojaId) {
-    await db.insert(schema.priceObservations).values({
-      produtoId: parsed.data.produtoId,
-      lojaId: parsed.data.lojaId,
-      precoCent: precoUnitarioCent,
-      fonte: "COMPRA_REGISTRADA",
-    });
+    queries.push(
+      db.insert(schema.priceObservations).values({
+        produtoId: parsed.data.produtoId,
+        lojaId: parsed.data.lojaId,
+        precoCent: precoUnitarioCent,
+        fonte: "COMPRA_REGISTRADA",
+      }),
+    );
   }
 
   if (itemListaComprasId) {
-    await db
-      .update(schema.itensListaCompras)
-      .set({ status: "COMPRADO" })
-      .where(and(eq(schema.itensListaCompras.id, String(itemListaComprasId)), eq(schema.itensListaCompras.obraId, obraId)));
+    queries.push(
+      db
+        .update(schema.itensListaCompras)
+        .set({ status: "COMPRADO" })
+        .where(and(eq(schema.itensListaCompras.id, String(itemListaComprasId)), eq(schema.itensListaCompras.obraId, obraId))),
+    );
   }
+
+  await db.batch(queries as [BatchItem<"pg">, ...BatchItem<"pg">[]]);
 
   revalidatePath("/compras");
   return {};

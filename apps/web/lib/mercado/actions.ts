@@ -114,27 +114,30 @@ export async function criarOferta(_prev: FormState, formData: FormData): Promise
     return { fieldErrors: { preco: "Informe um preço válido." }, values: valoresDoFormulario(formData) };
   const freteCent = parsed.data.frete ? reaisToCents(parseNumberInput(parsed.data.frete) ?? 0) : null;
 
-  await db.insert(schema.ofertas).values({
-    produtoId: parsed.data.produtoId,
-    lojaId: parsed.data.lojaId,
-    precoCent,
-    unidade: parsed.data.unidade,
-    freteCent,
-    fonte: "MANUAL",
-    fonteUrl: parsed.data.fonteUrl ?? null,
-    confianca: "CONFIRMADO",
-  });
-
   // Histórico de preço é append-only (nunca atualizado) — toda oferta manual
   // vira também uma observação de preço, para alimentar a classificação
   // verde/amarelo/vermelho/cinza (packages/domain/src/price-history.ts).
-  await db.insert(schema.priceObservations).values({
-    produtoId: parsed.data.produtoId,
-    lojaId: parsed.data.lojaId,
-    precoCent,
-    fonte: "MANUAL",
-    fonteUrl: parsed.data.fonteUrl ?? null,
-  });
+  // As duas gravações são atômicas via `db.batch` (ver nota em
+  // lib/compras/actions.ts sobre por que não há `db.transaction()` aqui).
+  await db.batch([
+    db.insert(schema.ofertas).values({
+      produtoId: parsed.data.produtoId,
+      lojaId: parsed.data.lojaId,
+      precoCent,
+      unidade: parsed.data.unidade,
+      freteCent,
+      fonte: "MANUAL",
+      fonteUrl: parsed.data.fonteUrl ?? null,
+      confianca: "CONFIRMADO",
+    }),
+    db.insert(schema.priceObservations).values({
+      produtoId: parsed.data.produtoId,
+      lojaId: parsed.data.lojaId,
+      precoCent,
+      fonte: "MANUAL",
+      fonteUrl: parsed.data.fonteUrl ?? null,
+    }),
+  ]);
 
   revalidatePath("/compras");
   return {};
@@ -247,23 +250,24 @@ export async function importarOfertaMercadoLivre(
 
   const lojaId = await obterOuCriarLojaMercadoLivre();
 
-  await db.insert(schema.ofertas).values({
-    produtoId,
-    lojaId,
-    precoCent: resultado.precoCent,
-    unidade: "un",
-    fonte: "MERCADO_LIVRE",
-    fonteUrl: resultado.permalink,
-    confianca: "CONFIRMADO",
-  });
-
-  await db.insert(schema.priceObservations).values({
-    produtoId,
-    lojaId,
-    precoCent: resultado.precoCent,
-    fonte: "MERCADO_LIVRE",
-    fonteUrl: resultado.permalink,
-  });
+  await db.batch([
+    db.insert(schema.ofertas).values({
+      produtoId,
+      lojaId,
+      precoCent: resultado.precoCent,
+      unidade: "un",
+      fonte: "MERCADO_LIVRE",
+      fonteUrl: resultado.permalink,
+      confianca: "CONFIRMADO",
+    }),
+    db.insert(schema.priceObservations).values({
+      produtoId,
+      lojaId,
+      precoCent: resultado.precoCent,
+      fonte: "MERCADO_LIVRE",
+      fonteUrl: resultado.permalink,
+    }),
+  ]);
 
   revalidatePath("/compras");
   return {};

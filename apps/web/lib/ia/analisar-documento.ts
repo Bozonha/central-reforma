@@ -2,6 +2,7 @@
 
 import { db, schema } from "@central-reforma/database";
 import { and, eq } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
@@ -115,6 +116,12 @@ async function analisarPlantaInterno(
   const resultado: AmbienteAnalisado[] = [];
   const agora = new Date().toLocaleDateString("pt-BR");
 
+  // Cada ambiente extraído vira um insert/update; todos são gravados junto
+  // com a atualização de `documentos.extraidoPor` num único `db.batch`, para
+  // que a análise inteira seja atômica (não deixar ambientes parcialmente
+  // gravados se uma query no meio falhar).
+  const queries: BatchItem<"pg">[] = [];
+
   for (const amb of parsed.ambientes) {
     if (!amb.nome || typeof amb.nome !== "string") continue;
     const confianca: Confianca = ["ALTA", "MEDIA", "BAIXA", "NAO_LEGIVEL"].includes(amb.confianca) ? amb.confianca : "NAO_LEGIVEL";
@@ -139,15 +146,17 @@ async function analisarPlantaInterno(
 
     const existente = existentes.find((e) => e.nome.trim().toLowerCase() === amb.nome.trim().toLowerCase());
     if (existente) {
-      await db.update(schema.ambientes).set(valores).where(eq(schema.ambientes.id, existente.id));
+      queries.push(db.update(schema.ambientes).set(valores).where(eq(schema.ambientes.id, existente.id)));
       resultado.push({ nome: amb.nome, larguraM: valores.largura, comprimentoM: valores.comprimento, alturaM: valores.altura, confianca, observacoes: amb.observacoes ?? null, acao: "ATUALIZADO" });
     } else {
-      await db.insert(schema.ambientes).values({ obraId, nome: amb.nome, ...valores });
+      queries.push(db.insert(schema.ambientes).values({ obraId, nome: amb.nome, ...valores }));
       resultado.push({ nome: amb.nome, larguraM: valores.largura, comprimentoM: valores.comprimento, alturaM: valores.altura, confianca, observacoes: amb.observacoes ?? null, acao: "CRIADO" });
     }
   }
 
-  await db.update(schema.documentos).set({ extraidoPor: `IA:${cascataResultado.provedor}` }).where(eq(schema.documentos.id, documentoId));
+  queries.push(db.update(schema.documentos).set({ extraidoPor: `IA:${cascataResultado.provedor}` }).where(eq(schema.documentos.id, documentoId)));
+
+  await db.batch(queries as [BatchItem<"pg">, ...BatchItem<"pg">[]]);
 
   revalidatePath("/ambientes");
 
