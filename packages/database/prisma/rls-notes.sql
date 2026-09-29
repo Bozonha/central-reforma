@@ -1,9 +1,7 @@
 -- rls-notes.sql
 --
 -- ATENCAO: este arquivo NAO e uma migration e NAO e aplicado ao banco.
--- E apenas um esboco de referencia da politica de Row-Level Security (RLS)
--- que devera ser implementada quando a autenticacao for adicionada (em uma
--- etapa futura, fora do escopo do MVP 0).
+-- E apenas um esboco de referencia da politica de Row-Level Security (RLS).
 --
 -- Contexto (decisao de produto "B.5"): a tabela `obras` nao tem uma coluna de
 -- "dono". Quem tem acesso a uma Obra (e, por extensao, aos seus Ambientes) e
@@ -12,17 +10,41 @@
 -- NUNCA deve ser resolvido checando uma coluna de dono direta em `obras`,
 -- porque essa coluna nao existe e nao vai existir.
 --
--- Mecanismo de identidade do usuario atual: a ser definido na etapa de auth.
--- O esboco abaixo assume que a aplicacao define, por conexao/transacao, uma
--- setting customizada do Postgres com o id do usuario autenticado, por
--- exemplo via:
+-- Mecanismo de identidade do usuario atual: a auth ja existe (JWT + bcrypt,
+-- ver CLAUDE.md), mas a aplicacao NUNCA definiu `app.current_user_id` numa
+-- sessao/transacao do Postgres — e ha um motivo estrutural real para isso,
+-- nao so falta de tempo:
 --
---   SELECT set_config('app.current_user_id', '<usuarioId>', true);
+--   O banco roda via `@neondatabase/serverless` no modo `neon-http`
+--   (packages/database/src/client.ts) — cada `db.select()/.insert()/...` e
+--   uma chamada HTTP INDEPENDENTE, sem conexao/sessao persistente entre
+--   chamadas. `SELECT set_config('app.current_user_id', ..., true)` so
+--   sobrevive dentro da MESMA transacao; numa chamada HTTP isolada, o efeito
+--   desaparece antes da proxima query rodar. O driver so tem UM jeito de
+--   agrupar chamadas na mesma transacao real: `db.batch([...])` (mapeia para
+--   `client.transaction([...])` do driver Neon).
 --
--- e as policies leem esse valor com current_setting('app.current_user_id', true).
--- Esse mecanismo (setting de sessao vs. outra estrategia, ex: JWT claims via
--- extensao, role por usuario, etc.) sera decidido e implementado junto com a
--- autenticacao. O que segue e apenas o esqueleto pretendido.
+--   Ou seja: ligar RLS por usuario so funciona de verdade se TODA consulta
+--   escopada por obra do app passar a rodar como
+--   `db.batch([sql\`select set_config('app.current_user_id', ${id}, true)\`, consultaReal])`
+--   em vez do `db.select()/.update()/...` direto usado hoje em praticamente
+--   toda `app/**/page.tsx` e `lib/**/actions.ts`. Isso e uma migracao grande
+--   (dezenas de arquivos), nao um "ligar uma flag" — e um call site esquecido
+--   nessa migracao faz aquele usuario ver a obra vazia em producao (RLS
+--   bloqueia por padrao), sem um jeito de testar o fluxo completo
+--   ponta-a-ponta neste ambiente de desenvolvimento hoje (sem acesso de rede
+--   ao Neon a partir do sandbox — so via MCP para SQL direto).
+--
+-- DECISAO (2026-09-29, avaliada com o dono do produto): adiar essa migracao
+-- em vez de arriscar um rollout as-cegas em producao. A checagem em
+-- app/lib/auth/obra-access.ts continua sendo a UNICA camada de isolamento
+-- por enquanto (auditada e sem bypass encontrado). Quando este trabalho for
+-- retomado, o primeiro passo NAO e a policy de RLS em si (essa parte do
+-- esboco abaixo ja esta pronta) — e criar um ponto de acesso a dados
+-- centralizado (ex.: `packages/database/src/obra-scoped.ts`) que todo
+-- page.tsx/actions.ts escopado por obra passa a usar, e so DEPOIS ligar
+-- `ENABLE ROW LEVEL SECURITY` — nessa ordem, para nunca ter uma janela em
+-- que RLS esta ligado mas o app ainda nao propaga o usuario atual.
 
 -- =============================================================================
 -- ESBOCO (NAO APLICADO) — habilitar RLS e policies em `obras`
