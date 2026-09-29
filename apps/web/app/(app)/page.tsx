@@ -1,6 +1,6 @@
 import { db, schema } from "@central-reforma/database";
 import { inArray } from "drizzle-orm";
-import { centsToBRL, OBRA_TIPOS, percentOf, resumirOrcamento } from "@central-reforma/domain";
+import { centsToBRL, gerarAlertas, OBRA_TIPOS, resumirOrcamento, type StatusItemCompra, type StatusTarefa } from "@central-reforma/domain";
 import { requireSession } from "../../lib/auth/actions";
 import { obraIdsDoUsuario } from "../../lib/auth/obra-access";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
@@ -119,45 +119,16 @@ export default async function DashboardPage() {
     .slice(0, 5);
 
   // Alertas — sempre derivados de dados reais, nunca "impressão" da IA
-  // (CLAUDE.md #1/#3): cada mensagem é calculada por regra determinística.
-  const hoje = new Date();
-  const alertas: { texto: string; nivel: "alto" | "medio" }[] = [];
-
-  for (const l of linhas) {
-    if (l.planejadoCent <= 0) continue;
-    const pct = percentOf(l.compradoCent, l.planejadoCent);
-    if (pct >= 100) {
-      alertas.push({
-        texto: `Orçamento de "${l.categoria}"${obrasBase.length > 1 ? ` (${obraNome.get(l.obraId)})` : ""} já ultrapassou o previsto (${pct}%).`,
-        nivel: "alto",
-      });
-    } else if (pct >= 80) {
-      alertas.push({
-        texto: `Orçamento de "${l.categoria}"${obrasBase.length > 1 ? ` (${obraNome.get(l.obraId)})` : ""} já usou ${pct}% do previsto.`,
-        nivel: "medio",
-      });
-    }
-  }
-
-  for (const t of tarefas) {
-    if (t.status !== "CONCLUIDA" && t.fim && t.fim < hoje) {
-      alertas.push({
-        texto: `"${t.titulo}"${obrasBase.length > 1 ? ` (${obraNome.get(t.obraId)})` : ""} está atrasada — previsto para ${formatData(t.fim)}.`,
-        nivel: "alto",
-      });
-    }
-  }
-
-  const cincoDiasAtras = new Date(hoje.getTime() - 5 * 24 * 60 * 60 * 1000);
-  const pendentesAntigos = itensListaPendentes.filter((i) => i.criadoEm < cincoDiasAtras);
-  if (pendentesAntigos.length > 0) {
-    alertas.push({
-      texto: `${pendentesAntigos.length} ${pendentesAntigos.length === 1 ? "item está pendente" : "itens estão pendentes"} na lista de compras há mais de 5 dias.`,
-      nivel: "medio",
-    });
-  }
-
-  alertas.sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === "alto" ? -1 : 1));
+  // (CLAUDE.md #1/#3): os limiares vivem em packages/domain como função pura
+  // testada (gerarAlertas), a página só monta a entrada e renderiza a saída.
+  const alertas = gerarAlertas({
+    linhas: linhas.map((l) => ({ obraId: l.obraId, categoria: l.categoria, planejadoCent: l.planejadoCent, compradoCent: l.compradoCent })),
+    tarefas: tarefas.map((t) => ({ obraId: t.obraId, titulo: t.titulo, status: t.status as StatusTarefa, fim: t.fim })),
+    itensLista: itensPendentes.map((i) => ({ obraId: i.obraId, status: i.status as StatusItemCompra, criadoEm: i.criadoEm })),
+    obraNomePorId: obraNome,
+    mostrarNomeObra: obrasBase.length > 1,
+    agora: new Date(),
+  });
 
   const tipoLabel = obraDestaque ? OBRA_TIPOS.find((t) => t.value === obraDestaque.tipo)?.label ?? obraDestaque.tipo : "";
 
