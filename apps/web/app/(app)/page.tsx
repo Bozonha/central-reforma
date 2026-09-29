@@ -22,12 +22,17 @@ function StatCard({
   sublabel,
   icon,
   tone = "default",
+  hero = false,
+  className = "",
 }: {
   label: string;
   value: string;
   sublabel?: string;
   icon: IconName;
   tone?: "default" | "positive" | "negative";
+  /** Tile "âncora" do bento — maior, com ícone em destaque e fundo levemente tingido. */
+  hero?: boolean;
+  className?: string;
 }) {
   const toneClasses = {
     default: "bg-[var(--color-neutral-status-soft)] text-[var(--color-neutral-status)]",
@@ -36,15 +41,15 @@ function StatCard({
   }[tone];
 
   return (
-    <Card>
-      <CardBody>
+    <Card className={`h-full ${hero ? "bg-gradient-to-br from-[var(--color-primary-soft)] to-[var(--color-surface)]" : ""} ${className}`}>
+      <CardBody className="flex h-full flex-col justify-between">
         <div className="flex items-center gap-3">
-          <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${toneClasses}`}>
-            <Icon name={icon} className="h-[18px] w-[18px]" />
+          <div className={`flex items-center justify-center rounded-lg ${toneClasses} ${hero ? "h-11 w-11" : "h-9 w-9"}`}>
+            <Icon name={icon} className={hero ? "h-5 w-5" : "h-[18px] w-[18px]"} />
           </div>
           <p className="text-sm font-medium text-[var(--color-text-muted)]">{label}</p>
         </div>
-        <p className="mt-3 text-2xl font-semibold tracking-tight text-[var(--color-text)]">
+        <p className={`mt-3 font-semibold tracking-tight text-[var(--color-text)] ${hero ? "text-3xl" : "text-2xl"}`}>
           {value}
           {sublabel ? <span className="ml-1 text-sm font-normal text-[var(--color-text-muted)]">{sublabel}</span> : null}
         </p>
@@ -172,8 +177,21 @@ export default async function DashboardPage() {
         </Card>
       ) : null}
 
+      {/*
+        Layout "bento": um único grid com tiles de tamanhos diferentes em vez
+        de várias fileiras iguais — o orçamento planejado (tile âncora) e o
+        gráfico ganham mais espaço/altura, o resto se encaixa ao redor. Grid
+        de fluxo automático (sem grid-template fixo) para não depender de
+        quais blocos existem (gráfico e tarefas são condicionais).
+      */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Orçamento planejado" value={centsToBRL(resumoGeral.planejadoCent)} icon="orcamento" />
+        <StatCard
+          label="Orçamento planejado"
+          value={centsToBRL(resumoGeral.planejadoCent)}
+          icon="orcamento"
+          hero
+          className="sm:col-span-2 lg:col-span-2 lg:row-span-2"
+        />
         <StatCard
           label="Gasto até agora (pago)"
           value={centsToBRL(resumoGeral.pagoCent)}
@@ -182,20 +200,23 @@ export default async function DashboardPage() {
           tone={resumoGeral.estourado ? "negative" : "default"}
         />
         <StatCard label="Restante" value={centsToBRL(resumoGeral.saldoCent)} icon="check" tone="positive" />
-        <StatCard label="Compras pendentes" value={`${itensListaPendentes.length} ${itensListaPendentes.length === 1 ? "item" : "itens"}`} icon="compras" />
-      </div>
+        <StatCard
+          label="Compras pendentes"
+          value={`${itensListaPendentes.length} ${itensListaPendentes.length === 1 ? "item" : "itens"}`}
+          icon="compras"
+          className="lg:col-span-2"
+        />
 
-      {chartData.length > 0 ? (
-        <Card>
-          <CardHeader title="Planejado × pago por obra" />
-          <CardBody>
-            <DashboardOrcamentoChart data={chartData} />
-          </CardBody>
-        </Card>
-      ) : null}
+        {chartData.length > 0 ? (
+          <Card className="sm:col-span-2 lg:col-span-2 lg:row-span-2">
+            <CardHeader title="Planejado × pago por obra" />
+            <CardBody>
+              <DashboardOrcamentoChart data={chartData} />
+            </CardBody>
+          </Card>
+        ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="sm:col-span-2 lg:col-span-2">
           <CardHeader title="Próximas tarefas" />
           <CardBody>
             {proximasTarefas.length === 0 ? (
@@ -221,7 +242,7 @@ export default async function DashboardPage() {
           </CardBody>
         </Card>
 
-        <Card>
+        <Card className="sm:col-span-2 lg:col-span-2">
           <CardHeader title="Alertas" />
           <CardBody>
             {alertas.length === 0 ? (
