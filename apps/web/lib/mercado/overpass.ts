@@ -48,7 +48,19 @@ function montarEndereco(tags: Record<string, string>): string | null {
   return partes.length > 0 ? partes.join(", ") : null;
 }
 
-export async function buscarLojasProximas(lat: number, lon: number, raioMetros = 3000): Promise<LojaDescoberta[]> {
+/**
+ * Resultado da busca no Overpass — `ok` distingue "busca funcionou e não
+ * achou nada perto" de "a busca não pôde ser concluída agora" (rede, timeout,
+ * resposta inesperada da API). Sem essa distinção, a UI não pode dizer ao
+ * usuário qual dos dois casos aconteceu (CLAUDE.md #1/#2: nunca disfarçar
+ * "não sei" de "não tem").
+ */
+export interface ResultadoBuscaLojas {
+  ok: boolean;
+  lojas: LojaDescoberta[];
+}
+
+export async function buscarLojasProximas(lat: number, lon: number, raioMetros = 3000): Promise<ResultadoBuscaLojas> {
   try {
     const query = montarQuery(lat, lon, raioMetros);
     const res = await fetch("https://overpass-api.de/api/interpreter", {
@@ -57,7 +69,7 @@ export async function buscarLojasProximas(lat: number, lon: number, raioMetros =
       body: `data=${encodeURIComponent(query)}`,
       signal: AbortSignal.timeout(20_000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) return { ok: false, lojas: [] };
 
     const dados = (await res.json()) as {
       elements: {
@@ -88,8 +100,8 @@ export async function buscarLojasProximas(lat: number, lon: number, raioMetros =
         enderecoAproximado: montarEndereco(tags),
       });
     }
-    return resultados;
+    return { ok: true, lojas: resultados };
   } catch {
-    return [];
+    return { ok: false, lojas: [] };
   }
 }

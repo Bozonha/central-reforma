@@ -190,13 +190,15 @@ export default async function ComprasPage({
   const temCoordenadas = obra?.latitude != null && obra?.longitude != null;
   let lojasDescobertas: LojaDescobertaMapa[] = [];
   let lojasProximasSalvas: LojaMapa[] = [];
+  let buscaLojasFalhou = false;
 
   if (temCoordenadas && obra) {
     const lat = obra.latitude!;
     const lon = obra.longitude!;
-    const [descobertas] = await Promise.all([buscarLojasProximas(lat, lon)]);
+    const [resultadoBusca] = await Promise.all([buscarLojasProximas(lat, lon)]);
+    buscaLojasFalhou = !resultadoBusca.ok;
     const jaSalvos = new Set(lojas.filter((l) => l.fonte === "OSM").map((l) => l.fonteId));
-    lojasDescobertas = descobertas.filter((d) => !jaSalvos.has(d.osmId));
+    lojasDescobertas = resultadoBusca.lojas.filter((d) => !jaSalvos.has(d.osmId));
 
     lojasProximasSalvas = lojas
       .filter((l): l is typeof l & { latitude: number; longitude: number } => l.latitude != null && l.longitude != null)
@@ -554,9 +556,14 @@ export default async function ComprasPage({
                         lojasSalvas={lojasProximasSalvas}
                         lojasDescobertas={lojasDescobertas}
                       />
-                      {lojasDescobertas.length === 0 && lojasProximasSalvas.length === 0 ? (
+                      {buscaLojasFalhou ? (
+                        <p className="text-xs text-[var(--color-warning)]">
+                          Não foi possível concluir a busca de lojas agora (falha ao consultar o OpenStreetMap) — tente recarregar a página em
+                          instantes.
+                        </p>
+                      ) : lojasDescobertas.length === 0 && lojasProximasSalvas.length === 0 ? (
                         <p className="text-xs text-[var(--color-text-faint)]">
-                          Nenhuma loja encontrada perto desta obra no momento (ou a busca não pôde ser concluída agora).
+                          Busca concluída: nenhuma loja de material de construção encontrada num raio de 3 km desta obra.
                         </p>
                       ) : (
                         <div className="flex flex-col gap-1.5 text-xs text-[var(--color-text-muted)]">

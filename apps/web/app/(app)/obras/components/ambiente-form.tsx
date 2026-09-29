@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Field, Input } from "../../../components/ui/form";
 import type { FormState } from "../../../../lib/obras/actions";
@@ -12,6 +12,24 @@ export function AmbienteForm({ action }: { action: (prev: FormState, formData: F
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   const formRef = useRef<HTMLFormElement>(null);
   useFormLifecycle(formRef, state, pending);
+
+  // Sem largura/comprimento o ambiente é salvo mesmo assim (medida fica
+  // DESCONHECIDA — ver ambienteSchema), então o único sinal de que o submit
+  // funcionou é o form resetar e uma nova linha aparecer na tabela abaixo.
+  // Isso passa despercebido, então mostramos uma confirmação temporária.
+  const wasPending = useRef(false);
+  const [mostrarSucesso, setMostrarSucesso] = useState(false);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    if (wasPending.current && !pending && !state.error && !state.fieldErrors) {
+      setMostrarSucesso(true);
+      t = setTimeout(() => setMostrarSucesso(false), 4000);
+    }
+    wasPending.current = pending;
+    return () => {
+      if (t) clearTimeout(t);
+    };
+  }, [pending, state]);
 
   return (
     <form ref={formRef} action={formAction} className="grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -29,8 +47,9 @@ export function AmbienteForm({ action }: { action: (prev: FormState, formData: F
           Adicionar
         </Button>
       </div>
-      {state.error ? (
-        <p className="col-span-full text-xs text-[var(--color-serious)]">{state.error}</p>
+      {state.error ? <p className="col-span-full text-xs text-[var(--color-serious)]">{state.error}</p> : null}
+      {mostrarSucesso ? (
+        <p className="col-span-full text-xs text-[var(--color-good)]">Ambiente adicionado — veja a tabela abaixo.</p>
       ) : null}
     </form>
   );
