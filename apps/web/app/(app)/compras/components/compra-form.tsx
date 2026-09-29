@@ -73,6 +73,9 @@ export function CompraForm({
           Registrar compra
         </Button>
       </div>
+      <p className="col-span-full text-xs text-[var(--color-text-faint)]">
+        Ao registrar, a quantidade entra automaticamente no Estoque (item existente é incrementado; sem correspondência, um novo é criado).
+      </p>
       {state.error ? <p className="col-span-full text-xs text-[var(--color-serious)]">{state.error}</p> : null}
     </form>
   );

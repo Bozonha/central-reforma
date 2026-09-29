@@ -3,7 +3,7 @@
 import { db, schema } from "@central-reforma/database";
 import type { StatusItemCompra } from "@central-reforma/domain";
 import { reaisToCents } from "@central-reforma/domain";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "../auth/actions";
@@ -157,8 +157,69 @@ export async function criarCompra(obraId: string, _prev: FormState, formData: Fo
 
   await db.batch(queries as [BatchItem<"pg">, ...BatchItem<"pg">[]]);
 
+  await sincronizarEstoqueComCompra({
+    obraId,
+    produtoId: parsed.data.produtoId ?? null,
+    nomeLivre: parsed.data.nomeLivre,
+    quantidade,
+  });
+
   revalidatePath("/compras");
+  revalidatePath("/estoque");
   return {};
+}
+
+/**
+ * Registrar uma compra incrementa o item de estoque correspondente em vez
+ * de deixar a pessoa lançar a mesma coisa duas vezes (uma em Compras, outra
+ * em Estoque). Casamento por produtoId do catálogo quando existe; senão por
+ * nome livre (comparação sem caixa/espaços) dentro da mesma obra — nunca
+ * casa com um item de outra obra. Sem correspondência, cria um item novo
+ * com origem "COMPRA" (proveniência: nasceu de uma compra registrada, não
+ * de digitação manual em Estoque) e unidade "un" como padrão razoável,
+ * ajustável depois na tela de Estoque.
+ */
+async function sincronizarEstoqueComCompra(params: {
+  obraId: string;
+  produtoId: string | null;
+  nomeLivre: string;
+  quantidade: number;
+}): Promise<void> {
+  const { obraId, produtoId, nomeLivre, quantidade } = params;
+
+  let itemExistenteId: string | null = null;
+
+  if (produtoId) {
+    const [item] = await db
+      .select({ id: schema.itensEstoque.id })
+      .from(schema.itensEstoque)
+      .where(and(eq(schema.itensEstoque.obraId, obraId), eq(schema.itensEstoque.produtoId, produtoId)))
+      .limit(1);
+    itemExistenteId = item?.id ?? null;
+  } else {
+    const nomeNormalizado = nomeLivre.trim().toLowerCase();
+    const candidatos = await db
+      .select({ id: schema.itensEstoque.id, nomeLivre: schema.itensEstoque.nomeLivre })
+      .from(schema.itensEstoque)
+      .where(and(eq(schema.itensEstoque.obraId, obraId), isNull(schema.itensEstoque.produtoId)));
+    itemExistenteId = candidatos.find((c) => c.nomeLivre?.trim().toLowerCase() === nomeNormalizado)?.id ?? null;
+  }
+
+  if (itemExistenteId) {
+    await db
+      .update(schema.itensEstoque)
+      .set({ quantidade: sql`${schema.itensEstoque.quantidade} + ${quantidade}` })
+      .where(eq(schema.itensEstoque.id, itemExistenteId));
+  } else {
+    await db.insert(schema.itensEstoque).values({
+      obraId,
+      produtoId,
+      nomeLivre,
+      quantidade,
+      unidade: "un",
+      origem: "COMPRA",
+    });
+  }
 }
 
 export async function excluirCompra(obraId: string, compraId: string): Promise<void> {
