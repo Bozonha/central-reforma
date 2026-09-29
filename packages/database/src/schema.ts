@@ -20,7 +20,7 @@
 // apps/web/lib/auth/obra-access.ts). Isso ainda não foi feito nesta etapa —
 // ver docs/product/roadmap.md.
 
-import { pgTable, text, integer, real, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, boolean, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
 
 const id = () =>
   text("id")
@@ -302,6 +302,27 @@ export const decisoes = pgTable("decisoes", {
   contexto: text("contexto"),
   data: createdAt(),
 });
+
+// ---------------------------------------------------------------------------
+// Segurança
+// ---------------------------------------------------------------------------
+
+/**
+ * Rate limiting de login (CLAUDE.md #6/#7 por extensão: proteger a conta
+ * como se protege o isolamento de dados). Guardado no Postgres em vez de
+ * memória do processo porque o app roda em funções serverless na Vercel —
+ * memória local não é compartilhada entre invocações/instâncias, então um
+ * contador em RAM não protegeria nada em produção.
+ */
+export const loginTentativas = pgTable(
+  "login_tentativas",
+  {
+    id: id(),
+    identificador: text("identificador").notNull(), // "email:<email>" ou "ip:<ip>"
+    tentativaEm: timestamp("tentativa_em", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("login_tentativas_identificador_tentativa_idx").on(t.identificador, t.tentativaEm)],
+);
 
 export const alertas = pgTable("alertas", {
   id: id(),
