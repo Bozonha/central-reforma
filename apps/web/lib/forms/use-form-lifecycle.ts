@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
+import { useRouter } from "next/navigation";
 import type { FormState } from "./state";
 
 /**
@@ -22,6 +23,7 @@ export function useFormLifecycle(
   pending: boolean,
 ) {
   const wasPending = useRef(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (wasPending.current && !pending) {
@@ -35,7 +37,14 @@ export function useFormLifecycle(
           }
         }
       }
+
+      // Navegação explícita no cliente em vez de depender só do redirect()
+      // disparado dentro da Server Action — ver o comentário em
+      // FormState.redirectTo para o porquê.
+      if (!falhou && state.redirectTo) {
+        router.push(state.redirectTo);
+      }
     }
     wasPending.current = pending;
-  }, [pending, state, formRef]);
+  }, [pending, state, formRef, router]);
 }

@@ -2,7 +2,6 @@
 
 import { db, schema } from "@central-reforma/database";
 import { and, eq } from "drizzle-orm";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
@@ -85,7 +84,7 @@ export async function criarObra(_prev: FormState, formData: FormData): Promise<F
   });
 
   revalidatePath("/obras");
-  redirect(`/obras/${obra.id}`);
+  return { redirectTo: `/obras/${obra.id}` };
 }
 
 export async function atualizarObra(obraId: string, _prev: FormState, formData: FormData): Promise<FormState> {
@@ -143,7 +142,7 @@ export async function atualizarObra(obraId: string, _prev: FormState, formData: 
 
   revalidatePath(`/obras/${obraId}`);
   revalidatePath("/obras");
-  redirect(`/obras/${obraId}`);
+  return { redirectTo: `/obras/${obraId}` };
 }
 
 export async function arquivarObra(obraId: string): Promise<void> {

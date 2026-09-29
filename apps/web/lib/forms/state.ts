@@ -17,6 +17,18 @@ export interface FormState {
    * Nunca inclui campos de senha (ver `valoresDoFormulario`).
    */
   values?: Record<string, string>;
+  /**
+   * Caminho para navegar após sucesso, em vez da Server Action chamar
+   * `redirect()` diretamente. `redirect()` lança uma exceção especial que o
+   * Next.js intercepta para transformar em navegação client-side quando a
+   * action é disparada via `useActionState` — na prática, observamos casos
+   * em produção em que a URL muda mas o conteúdo da tela não é atualizado
+   * até um F5 manual (o `pending` do formulário não assenta corretamente).
+   * Retornar `redirectTo` e deixar o componente cliente chamar
+   * `router.push()` explicitamente evita essa interação e dá controle total
+   * sobre o momento da navegação.
+   */
+  redirectTo?: string;
 }
 
 /** Extrai os campos de texto de um FormData para repopular o formulário em
