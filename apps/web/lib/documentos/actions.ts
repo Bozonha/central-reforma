@@ -61,6 +61,12 @@ export async function enviarDocumento(obraId: string, _prev: FormState, formData
   const ext = extensaoSegura(arquivo.name);
   const caminhoBlob = `${obraId}/${id}${ext}`;
 
+  // `access: "public"` é a única opção que o `@vercel/blob` `put()` suporta
+  // hoje (não há modo "private" na API). Isso por si só deixa `blobUrl`
+  // acessível a quem tiver o link, sem expiração. A mitigação vive na
+  // camada de aplicação: `blobUrl` nunca é exposta na UI — a listagem em
+  // documentos/page.tsx linka para /api/documentos/[id]/download, que exige
+  // sessão + requireObraAccess antes de buscar e servir o conteúdo.
   let blobUrl: string;
   try {
     const blob = await put(caminhoBlob, arquivo, {

@@ -111,7 +111,7 @@ export default async function DocumentosPage({
                     <tr key={doc.id} className="border-b border-[var(--color-border)] last:border-0">
                       <td className="py-2.5 font-medium text-[var(--color-text)]">
                         <a
-                          href={doc.arquivoUrl}
+                          href={`/api/documentos/${doc.id}/download`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-2 hover:text-[var(--color-primary)] hover:underline"
