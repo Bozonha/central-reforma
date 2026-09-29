@@ -51,6 +51,8 @@ if [ -d node_modules ]; then
   npm run lint --silent
   echo "pre-commit: rodando typecheck..."
   npm run typecheck --silent
+  echo "pre-commit: rodando testes..."
+  npm run test --silent
 else
   echo "pre-commit: node_modules não encontrado — pulando lint/typecheck (rode 'npm install' para ativar esta checagem)."
 fi

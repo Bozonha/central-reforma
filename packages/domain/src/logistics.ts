@@ -92,7 +92,10 @@ export interface TravelCostResult {
 export function calculateTravelCost(inputs: TravelCostInputs): TravelCostResult {
   const missing: string[] = [];
   if (inputs.fuelPricePerLiter == null) missing.push("preço do combustível");
-  if (inputs.vehicleKmPerLiter == null) missing.push("consumo do veículo (km/l)");
+  // `<= 0` e não só `== null`: um consumo de 0 km/l dividiria por zero
+  // (totalKm / vehicleKmPerLiter) e devolveria Infinity em vez de um custo
+  // — mesma regra de nunca inventar/disfarçar um número (CLAUDE.md #1).
+  if (inputs.vehicleKmPerLiter == null || inputs.vehicleKmPerLiter <= 0) missing.push("consumo do veículo (km/l)");
 
   if (missing.length > 0) {
     return { effectiveTravelCost: null, missingInputs: missing };
