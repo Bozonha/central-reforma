@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { hashPassword, verifyPassword } from "./password";
 import { createSessionCookie, destroySessionCookie, getSession } from "./session";
-import { obterIpRequisicao, registrarTentativaFalha, verificarRateLimitLogin } from "./rate-limit";
+import { obterIpRequisicao, registrarTentativa, verificarRateLimit } from "./rate-limit";
 import { loginSchema, registroSchema } from "../validation/auth";
 
 export interface AuthFormState {
@@ -77,22 +77,22 @@ export async function entrarComCredenciais(
   const { email, senha } = parsed.data;
 
   const ip = await obterIpRequisicao();
-  const identificadores = [`email:${email}`, `ip:${ip}`];
+  const identificadores = [`login:email:${email}`, `login:ip:${ip}`];
 
-  const { bloqueado } = await verificarRateLimitLogin(identificadores);
+  const { bloqueado } = await verificarRateLimit(identificadores);
   if (bloqueado) {
     return { error: "Muitas tentativas de login. Aguarde alguns minutos e tente novamente." };
   }
 
   const [usuario] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.email, email)).limit(1);
   if (!usuario) {
-    await registrarTentativaFalha(identificadores);
+    await registrarTentativa(identificadores);
     return { error: "E-mail ou senha incorretos." };
   }
 
   const senhaOk = await verifyPassword(senha, usuario.senhaHash);
   if (!senhaOk) {
-    await registrarTentativaFalha(identificadores);
+    await registrarTentativa(identificadores);
     return { error: "E-mail ou senha incorretos." };
   }
 

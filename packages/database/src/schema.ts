@@ -318,10 +318,30 @@ export const loginTentativas = pgTable(
   "login_tentativas",
   {
     id: id(),
-    identificador: text("identificador").notNull(), // "email:<email>" ou "ip:<ip>"
+    identificador: text("identificador").notNull(), // "login:email:<email>", "resetreq:ip:<ip>", etc.
     tentativaEm: timestamp("tentativa_em", { mode: "date" }).notNull().defaultNow(),
   },
   (t) => [index("login_tentativas_identificador_tentativa_idx").on(t.identificador, t.tentativaEm)],
+);
+
+/**
+ * Token de redefinição de senha — de uso único, expira em 1h (ver
+ * lib/auth/reset-senha.ts). Guardamos o hash SHA-256 do token, nunca o
+ * valor em si: um vazamento do banco não deve virar uma lista de senhas
+ * resetáveis. `usadoEm` marca consumo (em vez de apagar a linha) para dar
+ * rastro de auditoria de quando cada redefinição aconteceu.
+ */
+export const resetSenhaTokens = pgTable(
+  "reset_senha_tokens",
+  {
+    id: id(),
+    usuarioId: text("usuario_id").notNull().references(() => usuarios.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiraEm: timestamp("expira_em", { mode: "date" }).notNull(),
+    usadoEm: timestamp("usado_em", { mode: "date" }),
+    criadoEm: createdAt(),
+  },
+  (t) => [uniqueIndex("reset_senha_tokens_token_hash_idx").on(t.tokenHash)],
 );
 
 export const alertas = pgTable("alertas", {

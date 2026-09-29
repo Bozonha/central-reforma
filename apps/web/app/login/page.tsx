@@ -36,6 +36,12 @@ export default function LoginPage() {
               <Input id="email" name="email" type="email" autoComplete="email" required placeholder="voce@exemplo.com" />
             </Field>
             <PasswordField name="senha" label="Senha" autoComplete="current-password" error={state.fieldErrors?.senha} />
+            <Link
+              href="/recuperar-senha"
+              className="-mt-2 self-end text-xs font-medium text-[var(--color-primary)] hover:underline"
+            >
+              Esqueci minha senha
+            </Link>
 
             {state.error ? (
               <p className="rounded-lg bg-[var(--color-serious-soft)] px-3 py-2 text-xs text-[var(--color-serious)]">

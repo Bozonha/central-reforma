@@ -29,6 +29,13 @@
       "when": 1790689304135,
       "tag": "0003_optimal_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790689535056,
+      "tag": "0004_nasty_prism",
+      "breakpoints": true
     }
   ]
 }
