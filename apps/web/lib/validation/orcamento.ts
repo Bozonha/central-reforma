@@ -5,4 +5,5 @@ export const linhaOrcamentoSchema = z.object({
   planejado: z.string().min(1, "Informe o valor planejado."),
   comprado: z.string().optional(),
   pago: z.string().optional(),
+  ambienteId: z.string().trim().optional(),
 });

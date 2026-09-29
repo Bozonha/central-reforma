@@ -9,6 +9,7 @@ import { requireObraAccess } from "../auth/obra-access";
 import { linhaOrcamentoSchema } from "../validation/orcamento";
 import type { FormState } from "../obras/actions";
 import { valoresDoFormulario } from "../forms/state";
+import { ambientePertenceAObra } from "../obras/ambiente-guard";
 
 export async function criarLinhaOrcamento(obraId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const sessao = await requireSession();
@@ -19,6 +20,7 @@ export async function criarLinhaOrcamento(obraId: string, _prev: FormState, form
     planejado: formData.get("planejado"),
     comprado: formData.get("comprado") || undefined,
     pago: formData.get("pago") || undefined,
+    ambienteId: formData.get("ambienteId") || undefined,
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -30,8 +32,11 @@ export async function criarLinhaOrcamento(obraId: string, _prev: FormState, form
   if (planejadoCent == null)
     return { fieldErrors: { planejado: "Valor inválido." }, values: valoresDoFormulario(formData) };
 
+  const ambienteId = await ambientePertenceAObra(parsed.data.ambienteId, obraId);
+
   await db.insert(schema.linhasOrcamento).values({
     obraId,
+    ambienteId,
     categoria: parsed.data.categoria,
     planejadoCent,
     compradoCent: parsed.data.comprado ? (parseBRLToCents(parsed.data.comprado) ?? 0) : 0,

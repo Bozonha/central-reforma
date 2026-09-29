@@ -38,10 +38,12 @@ export default async function OrcamentoPage({
     );
   }
 
-  const [linhas, [obra]] = await Promise.all([
+  const [linhas, [obra], ambientes] = await Promise.all([
     db.select().from(schema.linhasOrcamento).where(eq(schema.linhasOrcamento.obraId, obraId)),
     db.select({ orcamentoTotalCent: schema.obras.orcamentoTotalCent }).from(schema.obras).where(eq(schema.obras.id, obraId)),
+    db.select({ id: schema.ambientes.id, nome: schema.ambientes.nome }).from(schema.ambientes).where(eq(schema.ambientes.obraId, obraId)),
   ]);
+  const ambienteNome = new Map(ambientes.map((a) => [a.id, a.nome]));
   const resumo = resumirOrcamento(
     linhas.map((l) => ({
       categoria: l.categoria,
@@ -146,7 +148,7 @@ export default async function OrcamentoPage({
       <Card>
         <CardHeader title="Categorias" />
         <CardBody className="flex flex-col gap-4">
-          <LinhaOrcamentoForm action={criarLinhaComObra} />
+          <LinhaOrcamentoForm action={criarLinhaComObra} ambientes={ambientes} />
           {linhas.length === 0 ? (
             <EmptyState icon="orcamento" title="Nenhuma categoria ainda" description="Adicione a primeira categoria de orçamento acima." />
           ) : (
@@ -155,6 +157,7 @@ export default async function OrcamentoPage({
                 <thead>
                   <tr className="border-b border-[var(--color-border)] text-left text-xs text-[var(--color-text-muted)]">
                     <th className="py-2 font-medium">Categoria</th>
+                    <th className="py-2 font-medium">Ambiente</th>
                     <th className="py-2 font-medium">Planejado</th>
                     <th className="py-2 font-medium">Comprado</th>
                     <th className="py-2 font-medium">Pago</th>
@@ -165,6 +168,9 @@ export default async function OrcamentoPage({
                   {linhas.map((l) => (
                     <tr key={l.id} className="border-b border-[var(--color-border)] last:border-0">
                       <td className="py-2.5 font-medium text-[var(--color-text)]">{l.categoria}</td>
+                      <td className="py-2.5 text-[var(--color-text-muted)]">
+                        {l.ambienteId ? ambienteNome.get(l.ambienteId) ?? "—" : "Obra toda"}
+                      </td>
                       <td className="py-2.5 text-[var(--color-text-muted)]">{centsToBRL(l.planejadoCent)}</td>
                       <td className="py-2.5 text-[var(--color-text-muted)]">{centsToBRL(l.compradoCent)}</td>
                       <td className="py-2.5 text-[var(--color-text-muted)]">{centsToBRL(l.pagoCent)}</td>

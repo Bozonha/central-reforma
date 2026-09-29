@@ -8,6 +8,7 @@ import { requireObraAccess } from "../auth/obra-access";
 import { itemEstoqueSchema } from "../validation/estoque";
 import type { FormState } from "../obras/actions";
 import { valoresDoFormulario } from "../forms/state";
+import { ambientePertenceAObra } from "../obras/ambiente-guard";
 
 export async function criarItemEstoque(obraId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const sessao = await requireSession();
@@ -17,6 +18,7 @@ export async function criarItemEstoque(obraId: string, _prev: FormState, formDat
     nomeLivre: formData.get("nomeLivre"),
     quantidade: formData.get("quantidade"),
     unidade: formData.get("unidade"),
+    ambienteId: formData.get("ambienteId") || undefined,
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -28,8 +30,14 @@ export async function criarItemEstoque(obraId: string, _prev: FormState, formDat
   if (Number.isNaN(quantidade))
     return { fieldErrors: { quantidade: "Quantidade inválida." }, values: valoresDoFormulario(formData) };
 
+  // Nunca confia no ambienteId enviado pelo form sem checar que pertence a
+  // esta obra (CLAUDE.md #6/#7) — mandar o id de um ambiente de outra obra
+  // não pode "vazar" o item para lá.
+  const ambienteId = await ambientePertenceAObra(parsed.data.ambienteId, obraId);
+
   await db.insert(schema.itensEstoque).values({
     obraId,
+    ambienteId,
     nomeLivre: parsed.data.nomeLivre,
     quantidade,
     unidade: parsed.data.unidade,

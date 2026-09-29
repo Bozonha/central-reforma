@@ -52,7 +52,7 @@ export default async function AmbientesPage() {
           {linhas.map((a) => {
             const area = areaAmbiente(a.largura, a.comprimento);
             return (
-              <Link key={a.id} href={`/obras/${a.obraId}`}>
+              <Link key={a.id} href={`/ambientes/${a.id}`}>
                 <Card className="h-full transition-shadow hover:shadow-[var(--shadow-raised)]">
                   <CardBody>
                     <p className="text-sm font-semibold text-[var(--color-text)]">{a.nome}</p>

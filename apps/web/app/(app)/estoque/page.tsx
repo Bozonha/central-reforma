@@ -40,11 +40,11 @@ export default async function EstoquePage({
     );
   }
 
-  const itens = await db
-    .select()
-    .from(schema.itensEstoque)
-    .where(eq(schema.itensEstoque.obraId, obraId))
-    .orderBy(desc(schema.itensEstoque.atualizadoEm));
+  const [itens, ambientes] = await Promise.all([
+    db.select().from(schema.itensEstoque).where(eq(schema.itensEstoque.obraId, obraId)).orderBy(desc(schema.itensEstoque.atualizadoEm)),
+    db.select({ id: schema.ambientes.id, nome: schema.ambientes.nome }).from(schema.ambientes).where(eq(schema.ambientes.obraId, obraId)),
+  ]);
+  const ambienteNome = new Map(ambientes.map((a) => [a.id, a.nome]));
 
   const semEstoque = itens.filter((i) => i.quantidade === 0).length;
   const criarItemComObra = criarItemEstoque.bind(null, obraId);
@@ -85,7 +85,7 @@ export default async function EstoquePage({
       <Card>
         <CardHeader title="Itens" />
         <CardBody className="flex flex-col gap-4">
-          <ItemEstoqueForm action={criarItemComObra} />
+          <ItemEstoqueForm action={criarItemComObra} ambientes={ambientes} />
           {itens.length === 0 ? (
             <EmptyState icon="estoque" title="Nenhum item ainda" description="Adicione o primeiro item de estoque acima." />
           ) : (
@@ -94,6 +94,7 @@ export default async function EstoquePage({
                 <thead>
                   <tr className="border-b border-[var(--color-border)] text-left text-xs text-[var(--color-text-muted)]">
                     <th className="py-2 font-medium">Item</th>
+                    <th className="py-2 font-medium">Ambiente</th>
                     <th className="py-2 font-medium">Quantidade</th>
                     <th className="py-2 font-medium">Unidade</th>
                     <th className="py-2" />
@@ -103,6 +104,9 @@ export default async function EstoquePage({
                   {itens.map((item) => (
                     <tr key={item.id} className="border-b border-[var(--color-border)] last:border-0">
                       <td className="py-2.5 font-medium text-[var(--color-text)]">{item.nomeLivre ?? "Item sem nome"}</td>
+                      <td className="py-2.5 text-[var(--color-text-muted)]">
+                        {item.ambienteId ? ambienteNome.get(item.ambienteId) ?? "—" : "Obra toda"}
+                      </td>
                       <td className="py-2.5 text-[var(--color-text-muted)]">
                         <div className="flex items-center gap-2">
                           <form action={async () => { "use server"; await ajustarQuantidadeEstoque(obraId, item.id, -1); }}>

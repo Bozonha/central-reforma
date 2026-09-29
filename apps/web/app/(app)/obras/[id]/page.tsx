@@ -162,7 +162,11 @@ export default async function ObraDetalhePage({ params }: { params: Promise<{ id
                     const area = areaAmbiente(a.largura, a.comprimento);
                     return (
                       <tr key={a.id} className="border-b border-[var(--color-border)] last:border-0">
-                        <td className="py-2.5 font-medium text-[var(--color-text)]">{a.nome}</td>
+                        <td className="py-2.5 font-medium text-[var(--color-text)]">
+                          <Link href={`/ambientes/${a.id}`} className="hover:text-[var(--color-primary)] hover:underline">
+                            {a.nome}
+                          </Link>
+                        </td>
                         <td className="py-2.5 text-[var(--color-text-muted)]">
                           {a.largura && a.comprimento ? `${a.largura}m × ${a.comprimento}m` : "—"}
                         </td>
