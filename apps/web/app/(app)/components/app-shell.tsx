@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ActionSearchBar } from "./action-search-bar";
+import { CommandPalette } from "./command-palette";
 import { ThemeToggle } from "./theme-toggle";
 import { Icon } from "../../components/icons";
 import { NAV_ITEMS } from "./nav-config";
@@ -141,7 +141,7 @@ export function AppShell({ children, sessao }: { children: ReactNode; sessao: Se
           >
             <Icon name="menu" className="h-5 w-5" />
           </button>
-          <ActionSearchBar />
+          <CommandPalette />
           <div className="ml-auto flex shrink-0 items-center gap-3">
             <ThemeToggle />
             <div className="hidden text-right sm:block">
