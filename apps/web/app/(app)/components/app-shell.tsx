@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ActionSearchBar } from "./action-search-bar";
@@ -8,6 +8,24 @@ import { ThemeToggle } from "./theme-toggle";
 import { Icon } from "../../components/icons";
 import { NAV_ITEMS } from "./nav-config";
 import { sairDaConta } from "../../../lib/auth/actions";
+import { OBRA_ATIVA_EVENT } from "../../../lib/obras/obra-cookie";
+import { lerObraAtivaCookie } from "../../../lib/obras/obra-cookie-client";
+
+// Assina o cookie `cr_obra_ativa` via useSyncExternalStore em vez de
+// useState+useEffect: evita o erro do eslint react-hooks/set-state-in-effect
+// (setState síncrono dentro de efeito) e é o padrão correto do React para ler
+// uma fonte externa só-de-navegador (o cookie, atualizado pelo evento
+// OBRA_ATIVA_EVENT disparado por ObraSelector/ObraCookieSync).
+function subscribeObraAtiva(callback: () => void) {
+  window.addEventListener(OBRA_ATIVA_EVENT, callback);
+  return () => window.removeEventListener(OBRA_ATIVA_EVENT, callback);
+}
+function getObraAtivaSnapshot() {
+  return lerObraAtivaCookie();
+}
+function getObraAtivaServerSnapshot() {
+  return null;
+}
 
 function BrandMark() {
   return (
@@ -30,14 +48,20 @@ function isActive(pathname: string, href: string) {
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  // Lê o cookie e escuta o evento disparado por ObraSelector / ObraCookieSync
+  // sempre que a obra ativa muda — assim a barra lateral fica sabendo, mesmo
+  // sem remontar e sem depender de hooks de navegação.
+  const obraAtiva = useSyncExternalStore(subscribeObraAtiva, getObraAtivaSnapshot, getObraAtivaServerSnapshot);
+
   return (
     <nav className="flex flex-1 flex-col gap-0.5 px-3 py-2">
       {NAV_ITEMS.map((item) => {
         const active = isActive(pathname, item.href);
+        const href = item.crossObra && obraAtiva ? `${item.href}?obraId=${obraAtiva}` : item.href;
         return (
           <Link
             key={item.label}
-            href={item.href}
+            href={href}
             onClick={onNavigate}
             className={`group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               active

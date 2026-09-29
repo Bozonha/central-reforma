@@ -19,6 +19,7 @@ import { EmptyState } from "../../../components/ui/empty-state";
 import { Icon } from "../../../components/icons";
 import { AmbienteForm } from "../components/ambiente-form";
 import { ColaboradorForm } from "../components/colaborador-form";
+import { ObraCookieSync } from "../../components/obra-cookie-sync";
 import Link from "next/link";
 
 export default async function ObraDetalhePage({ params }: { params: Promise<{ id: string }> }) {
@@ -61,6 +62,7 @@ export default async function ObraDetalhePage({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
+      <ObraCookieSync obraId={id} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
