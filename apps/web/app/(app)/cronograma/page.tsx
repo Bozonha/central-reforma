@@ -1,5 +1,5 @@
 import { db, schema } from "@central-reforma/database";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, ilike } from "drizzle-orm";
 import { PRIORIDADES, STATUS_TAREFA, type StatusTarefa } from "@central-reforma/domain";
 import { requireSession } from "../../../lib/auth/actions";
 import { resolverObraSelecionada } from "../../../lib/obras/selecionar";
@@ -9,8 +9,12 @@ import { EmptyState } from "../../components/ui/empty-state";
 import { LinkButton } from "../../components/ui/button";
 import { Icon } from "../../components/icons";
 import { ObraSelector } from "../components/obra-selector";
+import { BuscaInline } from "../components/busca-inline";
+import { Pagination, parsePagina } from "../../components/ui/pagination";
 import { TarefaForm } from "./components/tarefa-form";
 import { Timeline, type TimelineTarefa } from "./components/timeline";
+
+const TAMANHO_PAGINA = 20;
 
 const STATUS_BADGE: Record<StatusTarefa, string> = {
   PENDENTE: "bg-[var(--color-neutral-status-soft)] text-[var(--color-neutral-status)]",
@@ -30,11 +34,13 @@ function formatData(d: Date | null) {
 export default async function CronogramaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ obraId?: string }>;
+  searchParams: Promise<{ obraId?: string; pagina?: string; q?: string }>;
 }) {
   const sessao = await requireSession();
-  const { obraId: obraIdParam } = await searchParams;
+  const { obraId: obraIdParam, pagina: paginaParam, q: qParam } = await searchParams;
   const { obras, obraId } = await resolverObraSelecionada(sessao.usuarioId, obraIdParam);
+  const pagina = parsePagina(paginaParam);
+  const q = qParam?.trim() || undefined;
 
   if (!obraId) {
     return (
@@ -53,17 +59,27 @@ export default async function CronogramaPage({
     );
   }
 
-  const tarefas = await db
+  // Estatísticas e linha do tempo sempre olham a obra inteira (não a busca
+  // nem a página atual) — só a tabela abaixo é filtrada/paginada.
+  const todasTarefas = await db.select().from(schema.tarefas).where(eq(schema.tarefas.obraId, obraId)).orderBy(asc(schema.tarefas.inicio));
+
+  const condicoesFiltro = [eq(schema.tarefas.obraId, obraId)];
+  if (q) condicoesFiltro.push(ilike(schema.tarefas.titulo, `%${q}%`));
+  const linhasBuscadas = await db
     .select()
     .from(schema.tarefas)
-    .where(eq(schema.tarefas.obraId, obraId))
-    .orderBy(asc(schema.tarefas.inicio));
+    .where(and(...condicoesFiltro))
+    .orderBy(asc(schema.tarefas.inicio))
+    .limit(TAMANHO_PAGINA + 1)
+    .offset((pagina - 1) * TAMANHO_PAGINA);
+  const temProximaPagina = linhasBuscadas.length > TAMANHO_PAGINA;
+  const tarefas = linhasBuscadas.slice(0, TAMANHO_PAGINA);
 
-  const concluidas = tarefas.filter((t) => t.status === "CONCLUIDA").length;
-  const emAndamento = tarefas.filter((t) => t.status === "EM_ANDAMENTO").length;
+  const concluidas = todasTarefas.filter((t) => t.status === "CONCLUIDA").length;
+  const emAndamento = todasTarefas.filter((t) => t.status === "EM_ANDAMENTO").length;
   const criarTarefaComObra = criarTarefa.bind(null, obraId);
 
-  const timelineTarefas: TimelineTarefa[] = tarefas
+  const timelineTarefas: TimelineTarefa[] = todasTarefas
     .filter((t): t is typeof t & { inicio: Date; fim: Date } => t.inicio !== null && t.fim !== null)
     .map((t) => ({
       id: t.id,
@@ -88,7 +104,7 @@ export default async function CronogramaPage({
         <Card>
           <CardBody>
             <p className="text-xs text-[var(--color-text-muted)]">Total</p>
-            <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">{tarefas.length}</p>
+            <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">{todasTarefas.length}</p>
           </CardBody>
         </Card>
         <Card>
@@ -118,8 +134,15 @@ export default async function CronogramaPage({
         <CardHeader title="Tarefas" />
         <CardBody className="flex flex-col gap-4">
           <TarefaForm action={criarTarefaComObra} />
+          {todasTarefas.length > 0 ? (
+            <BuscaInline obraId={obraId} valorAtual={q} placeholder="Buscar tarefa…" action="/cronograma" />
+          ) : null}
           {tarefas.length === 0 ? (
-            <EmptyState icon="cronograma" title="Nenhuma tarefa ainda" description="Adicione a primeira tarefa acima." />
+            <EmptyState
+              icon="cronograma"
+              title={q ? "Nenhuma tarefa encontrada" : "Nenhuma tarefa ainda"}
+              description={q ? `Nada bate com "${q}".` : "Adicione a primeira tarefa acima."}
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -184,6 +207,11 @@ export default async function CronogramaPage({
                   ))}
                 </tbody>
               </table>
+              <Pagination
+                paginaAtual={pagina}
+                temProximaPagina={temProximaPagina}
+                buildHref={(p) => `/cronograma?obraId=${obraId}${q ? `&q=${encodeURIComponent(q)}` : ""}&pagina=${p}`}
+              />
             </div>
           )}
         </CardBody>

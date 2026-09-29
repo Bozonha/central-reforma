@@ -1,5 +1,5 @@
 import { db, schema } from "@central-reforma/database";
-import { desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, ilike, sql } from "drizzle-orm";
 import { requireSession } from "../../../lib/auth/actions";
 import { resolverObraSelecionada } from "../../../lib/obras/selecionar";
 import { criarItemEstoque, ajustarQuantidadeEstoque, excluirItemEstoque } from "../../../lib/estoque/actions";
@@ -8,7 +8,11 @@ import { EmptyState } from "../../components/ui/empty-state";
 import { LinkButton } from "../../components/ui/button";
 import { Icon } from "../../components/icons";
 import { ObraSelector } from "../components/obra-selector";
+import { BuscaInline } from "../components/busca-inline";
+import { Pagination, parsePagina } from "../../components/ui/pagination";
 import { ItemEstoqueForm } from "./components/item-form";
+
+const TAMANHO_PAGINA = 20;
 
 function formatQuantidade(q: number) {
   return Number.isInteger(q) ? String(q) : q.toFixed(2).replace(".", ",");
@@ -17,11 +21,13 @@ function formatQuantidade(q: number) {
 export default async function EstoquePage({
   searchParams,
 }: {
-  searchParams: Promise<{ obraId?: string }>;
+  searchParams: Promise<{ obraId?: string; pagina?: string; q?: string }>;
 }) {
   const sessao = await requireSession();
-  const { obraId: obraIdParam } = await searchParams;
+  const { obraId: obraIdParam, pagina: paginaParam, q: qParam } = await searchParams;
   const { obras, obraId } = await resolverObraSelecionada(sessao.usuarioId, obraIdParam);
+  const pagina = parsePagina(paginaParam);
+  const q = qParam?.trim() || undefined;
 
   if (!obraId) {
     return (
@@ -40,13 +46,35 @@ export default async function EstoquePage({
     );
   }
 
-  const [itens, ambientes] = await Promise.all([
-    db.select().from(schema.itensEstoque).where(eq(schema.itensEstoque.obraId, obraId)).orderBy(desc(schema.itensEstoque.atualizadoEm)),
+  const condicoesFiltro = [eq(schema.itensEstoque.obraId, obraId)];
+  if (q) condicoesFiltro.push(ilike(schema.itensEstoque.nomeLivre, `%${q}%`));
+  const filtro = and(...condicoesFiltro);
+
+  const [linhasBuscadas, ambientes, [totais]] = await Promise.all([
+    db
+      .select()
+      .from(schema.itensEstoque)
+      .where(filtro)
+      .orderBy(desc(schema.itensEstoque.atualizadoEm))
+      .limit(TAMANHO_PAGINA + 1)
+      .offset((pagina - 1) * TAMANHO_PAGINA),
     db.select({ id: schema.ambientes.id, nome: schema.ambientes.nome }).from(schema.ambientes).where(eq(schema.ambientes.obraId, obraId)),
+    // Cartões de resumo sempre refletem a obra inteira, não a página/busca
+    // atual — um COUNT agregado em vez de carregar tudo para contar em JS.
+    db
+      .select({
+        total: count(),
+        zerados: sql<number>`count(*) filter (where ${schema.itensEstoque.quantidade} = 0)`.mapWith(Number),
+      })
+      .from(schema.itensEstoque)
+      .where(eq(schema.itensEstoque.obraId, obraId)),
   ]);
+  const temProximaPagina = linhasBuscadas.length > TAMANHO_PAGINA;
+  const itens = linhasBuscadas.slice(0, TAMANHO_PAGINA);
   const ambienteNome = new Map(ambientes.map((a) => [a.id, a.nome]));
 
-  const semEstoque = itens.filter((i) => i.quantidade === 0).length;
+  const semEstoque = totais?.zerados ?? 0;
+  const totalItens = totais?.total ?? 0;
   const criarItemComObra = criarItemEstoque.bind(null, obraId);
 
   return (
@@ -63,13 +91,13 @@ export default async function EstoquePage({
         <Card>
           <CardBody>
             <p className="text-xs text-[var(--color-text-muted)]">Itens cadastrados</p>
-            <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">{itens.length}</p>
+            <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">{totalItens}</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
             <p className="text-xs text-[var(--color-text-muted)]">Com estoque</p>
-            <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">{itens.length - semEstoque}</p>
+            <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">{totalItens - semEstoque}</p>
           </CardBody>
         </Card>
         <Card>
@@ -86,8 +114,15 @@ export default async function EstoquePage({
         <CardHeader title="Itens" />
         <CardBody className="flex flex-col gap-4">
           <ItemEstoqueForm action={criarItemComObra} ambientes={ambientes} />
+          {totalItens > 0 ? (
+            <BuscaInline obraId={obraId} valorAtual={q} placeholder="Buscar item…" action="/estoque" />
+          ) : null}
           {itens.length === 0 ? (
-            <EmptyState icon="estoque" title="Nenhum item ainda" description="Adicione o primeiro item de estoque acima." />
+            <EmptyState
+              icon="estoque"
+              title={q ? "Nenhum item encontrado" : "Nenhum item ainda"}
+              description={q ? `Nada bate com "${q}".` : "Adicione o primeiro item de estoque acima."}
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -152,6 +187,11 @@ export default async function EstoquePage({
                   ))}
                 </tbody>
               </table>
+              <Pagination
+                paginaAtual={pagina}
+                temProximaPagina={temProximaPagina}
+                buildHref={(p) => `/estoque?obraId=${obraId}${q ? `&q=${encodeURIComponent(q)}` : ""}&pagina=${p}`}
+              />
             </div>
           )}
         </CardBody>
