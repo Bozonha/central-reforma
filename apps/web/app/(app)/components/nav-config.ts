@@ -31,5 +31,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Cronograma", href: "/cronograma", icon: "cronograma", crossObra: true },
   { label: "Documentos", href: "/documentos", icon: "documentos", crossObra: true },
   { label: "Diário", href: "/diario", icon: "diario", crossObra: true },
+  { label: "Carregar", href: "/carregar", icon: "upload", crossObra: true },
   { label: "Administração", href: "/admin", icon: "users", admin: true },
 ];

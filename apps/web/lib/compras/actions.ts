@@ -179,7 +179,7 @@ export async function criarCompra(obraId: string, _prev: FormState, formData: Fo
  * de digitação manual em Estoque) e unidade "un" como padrão razoável,
  * ajustável depois na tela de Estoque.
  */
-async function sincronizarEstoqueComCompra(params: {
+export async function sincronizarEstoqueComCompra(params: {
   obraId: string;
   produtoId: string | null;
   nomeLivre: string;

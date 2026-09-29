@@ -51,3 +51,35 @@ REGRAS QUE VOCÊ DEVE SEGUIR SEMPRE:
 }`;
 
 export const PROMPT_GENERICO_USUARIO = "Analise este documento e retorne o JSON conforme instruído no system prompt.";
+
+/**
+ * Prompt específico para a aba "Carregar": a pessoa tira uma foto de um
+ * recibo/nota e descreve brevemente o que é. Diferente de PROMPT_GENERICO,
+ * este extrai os itens de linha em formato estruturado — mas o resultado é
+ * sempre um RASCUNHO editável, nunca gravado direto em Compras/Estoque (ver
+ * confirmarCarregamentoRecibo em lib/ia/analisar-carregamento.ts, que só
+ * grava após confirmação explícita da pessoa, conforme a regra 1 do
+ * CLAUDE.md de nunca inventar dado externo).
+ */
+export const PROMPT_RECIBO = `Você é um assistente que lê fotos de recibos e notas fiscais de uma obra/reforma e extrai os itens comprados em formato estruturado, para que a pessoa confira e confirme antes de qualquer registro.
+
+REGRAS QUE VOCÊ DEVE SEGUIR SEMPRE:
+- Nunca invente um item, quantidade ou preço que não esteja legível no documento. Se a quantidade não estiver explícita, assuma 1 apenas quando isso for razoavelmente óbvio (uma única linha de um único item); caso contrário, deixe "quantidade" como null.
+- Preços: leia o valor unitário quando impresso; se só o total da linha estiver legível, deixe "precoUnitarioTexto" null e preencha "valorTotalTexto". Transcreva os valores como texto exatamente como aparecem (ex.: "35,90"), sem o símbolo "R$", sem fazer conta.
+- "confianca" por item: "ALTA" quando nome, quantidade e preço estão todos legíveis; "MEDIA" quando falta um desses três mas o item é identificável; "BAIXA" quando a leitura é incerta.
+- Use a descrição que a pessoa forneceu (quando houver) só como contexto para entender o documento — nunca para inventar itens que não estão na imagem.
+- "loja" e "data": transcreva se estiverem legíveis no documento, senão null. Não infira.
+- Retorne SOMENTE um JSON válido, sem nenhum texto antes ou depois, exatamente neste formato:
+{
+  "loja": "string ou null",
+  "data": "string ou null — como aparece no documento",
+  "itens": [
+    {"nomeLivre": "string", "quantidade": number|null, "precoUnitarioTexto": "string ou null", "valorTotalTexto": "string ou null", "confianca": "ALTA"|"MEDIA"|"BAIXA"}
+  ],
+  "observacoes": "string ou null — algo relevante que não coube nos campos acima"
+}`;
+
+export function promptReciboUsuario(descricao: string | null): string {
+  const base = "Analise esta foto de recibo/nota e retorne o JSON conforme instruído no system prompt.";
+  return descricao ? `${base}\n\nContexto fornecido pela pessoa (use só para entender o documento, não para inventar itens): "${descricao}"` : base;
+}
