@@ -1,5 +1,5 @@
 import { db, schema } from "@central-reforma/database";
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { TIPOS_DOCUMENTO } from "@central-reforma/domain";
 import { requireSession } from "../../../lib/auth/actions";
 import { resolverObraSelecionada } from "../../../lib/obras/selecionar";
@@ -11,7 +11,9 @@ import { Icon } from "../../components/icons";
 import { ObraSelector } from "../components/obra-selector";
 import { DocumentoForm } from "./components/documento-form";
 import { AnalisarDocumentoButton } from "./components/analisar-documento-button";
+import { Pagination, parsePagina } from "../../components/ui/pagination";
 
+const TAMANHO_PAGINA = 20;
 const MIME_ANALISAVEL_POR_IA = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
 const TIPO_LABEL = Object.fromEntries(TIPOS_DOCUMENTO.map((t) => [t.value, t.label]));
@@ -29,11 +31,12 @@ function formatData(d: Date) {
 export default async function DocumentosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ obraId?: string }>;
+  searchParams: Promise<{ obraId?: string; pagina?: string }>;
 }) {
   const sessao = await requireSession();
-  const { obraId: obraIdParam } = await searchParams;
+  const { obraId: obraIdParam, pagina: paginaParam } = await searchParams;
   const { obras, obraId } = await resolverObraSelecionada(sessao.usuarioId, obraIdParam);
+  const pagina = parsePagina(paginaParam);
 
   if (!obraId) {
     return (
@@ -52,11 +55,19 @@ export default async function DocumentosPage({
     );
   }
 
-  const documentos = await db
-    .select()
-    .from(schema.documentos)
-    .where(eq(schema.documentos.obraId, obraId))
-    .orderBy(desc(schema.documentos.dataUpload));
+  const [linhasBuscadas, totalRows] = await Promise.all([
+    db
+      .select()
+      .from(schema.documentos)
+      .where(eq(schema.documentos.obraId, obraId))
+      .orderBy(desc(schema.documentos.dataUpload))
+      .limit(TAMANHO_PAGINA + 1)
+      .offset((pagina - 1) * TAMANHO_PAGINA),
+    db.select({ total: count() }).from(schema.documentos).where(eq(schema.documentos.obraId, obraId)),
+  ]);
+  const temProximaPagina = linhasBuscadas.length > TAMANHO_PAGINA;
+  const documentos = linhasBuscadas.slice(0, TAMANHO_PAGINA);
+  const totalDocumentos = totalRows[0]?.total ?? 0;
 
   const enviarDocumentoComObra = enviarDocumento.bind(null, obraId);
 
@@ -73,7 +84,7 @@ export default async function DocumentosPage({
       <Card>
         <CardBody>
           <p className="text-xs text-[var(--color-text-muted)]">Documentos enviados</p>
-          <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">{documentos.length}</p>
+          <p className="mt-1 text-lg font-semibold text-[var(--color-text)]">{totalDocumentos}</p>
         </CardBody>
       </Card>
 
@@ -129,6 +140,11 @@ export default async function DocumentosPage({
                   ))}
                 </tbody>
               </table>
+              <Pagination
+                paginaAtual={pagina}
+                temProximaPagina={temProximaPagina}
+                buildHref={(p) => `/documentos?obraId=${obraId}&pagina=${p}`}
+              />
             </div>
           )}
         </CardBody>

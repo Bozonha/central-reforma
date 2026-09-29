@@ -9,6 +9,9 @@ import { LinkButton } from "../../components/ui/button";
 import { Icon } from "../../components/icons";
 import { ObraSelector } from "../components/obra-selector";
 import { EntradaDiarioForm } from "./components/entrada-form";
+import { Pagination, parsePagina } from "../../components/ui/pagination";
+
+const TAMANHO_PAGINA = 20;
 
 function formatData(d: Date) {
   return d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
@@ -17,11 +20,12 @@ function formatData(d: Date) {
 export default async function DiarioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ obraId?: string }>;
+  searchParams: Promise<{ obraId?: string; pagina?: string }>;
 }) {
   const sessao = await requireSession();
-  const { obraId: obraIdParam } = await searchParams;
+  const { obraId: obraIdParam, pagina: paginaParam } = await searchParams;
   const { obras, obraId } = await resolverObraSelecionada(sessao.usuarioId, obraIdParam);
+  const pagina = parsePagina(paginaParam);
 
   if (!obraId) {
     return (
@@ -40,11 +44,15 @@ export default async function DiarioPage({
     );
   }
 
-  const entradas = await db
+  const linhasBuscadas = await db
     .select()
     .from(schema.diarioEntradas)
     .where(eq(schema.diarioEntradas.obraId, obraId))
-    .orderBy(desc(schema.diarioEntradas.data));
+    .orderBy(desc(schema.diarioEntradas.data))
+    .limit(TAMANHO_PAGINA + 1)
+    .offset((pagina - 1) * TAMANHO_PAGINA);
+  const temProximaPagina = linhasBuscadas.length > TAMANHO_PAGINA;
+  const entradas = linhasBuscadas.slice(0, TAMANHO_PAGINA);
 
   const criarEntradaComObra = criarEntradaDiario.bind(null, obraId);
 
@@ -89,6 +97,11 @@ export default async function DiarioPage({
               </CardBody>
             </Card>
           ))}
+          <Pagination
+            paginaAtual={pagina}
+            temProximaPagina={temProximaPagina}
+            buildHref={(p) => `/diario?obraId=${obraId}&pagina=${p}`}
+          />
         </div>
       )}
     </div>
