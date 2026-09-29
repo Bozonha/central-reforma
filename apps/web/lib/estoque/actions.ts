@@ -1,7 +1,7 @@
 "use server";
 
 import { db, schema } from "@central-reforma/database";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "../auth/actions";
 import { requireObraAccess } from "../auth/obra-access";
@@ -44,15 +44,18 @@ export async function ajustarQuantidadeEstoque(obraId: string, itemId: string, d
   const sessao = await requireSession();
   await requireObraAccess(sessao.usuarioId, obraId, "COLABORADOR");
 
-  const [item] = await db
-    .select()
-    .from(schema.itensEstoque)
-    .where(and(eq(schema.itensEstoque.id, itemId), eq(schema.itensEstoque.obraId, obraId)))
-    .limit(1);
-  if (!item) return;
-
-  const novaQuantidade = Math.max(0, item.quantidade + delta);
-  await db.update(schema.itensEstoque).set({ quantidade: novaQuantidade }).where(eq(schema.itensEstoque.id, itemId));
+  // Ajuste atômico no próprio SQL (GREATEST(0, quantidade + delta)) em vez
+  // de ler, calcular em JS e escrever de volta: dois cliques rápidos no
+  // mesmo item (ou dois usuários colaborando na mesma obra) podiam pisar um
+  // no ajuste do outro, já que o valor lido por um podia estar desatualizado
+  // na hora de escrever. O filtro por obraId também volta ao UPDATE, que
+  // tinha ficado só no SELECT — sem efeito prático hoje (o SELECT já
+  // garantia o escopo), mas mantém o mesmo padrão de defesa em profundidade
+  // usado no resto do arquivo (ver excluirItemEstoque).
+  await db
+    .update(schema.itensEstoque)
+    .set({ quantidade: sql`greatest(0, ${schema.itensEstoque.quantidade} + ${delta})` })
+    .where(and(eq(schema.itensEstoque.id, itemId), eq(schema.itensEstoque.obraId, obraId)));
   revalidatePath("/estoque");
 }
 
